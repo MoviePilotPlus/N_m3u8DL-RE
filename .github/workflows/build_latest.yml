@@ -232,7 +232,7 @@ jobs:
             sh -c "
               set -e
           
-              apk add --no-cache bash wget tar clang build-base cmake icu-dev icu-data-full zlib-static openssl-dev openssl-libs-static
+              apk add --no-cache bash wget tar clang build-base cmake icu-dev icu-data-full zlib-static openssl-dev openssl-libs-static binutils
   
               DOTNET_SDK_VERSION='${{ env.DOTNET_SDK_VERSION }}'
               DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-musl-arm64.tar.gz\"
@@ -241,7 +241,7 @@ jobs:
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
           
-              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -o /workspace/artifact
+              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -o /workspace/artifact
             "
 
       - name: Package [linux-arm64]
