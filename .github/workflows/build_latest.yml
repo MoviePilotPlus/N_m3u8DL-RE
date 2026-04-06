@@ -218,54 +218,30 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Build arm64 in alpine container
         run: |
-          docker run --rm \
+          docker run --rm --platform linux/arm64 \
             -v "$PWD:/workspace" \
             -w /workspace \
-            mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-22.04-cross-arm64-alpine \
-            bash -c "
+            alpine:3.21 \
+            sh -c "
               set -e
-              
-              apt-get update && apt-get install -y build-essential clang binutils-aarch64-linux-gnu
           
-              ALPINE_REPO='https://dl-cdn.alpinelinux.org/alpine/v3.21/main/aarch64'
-              echo \"Fetching latest OpenSSL version from Alpine...\"
-              SSL_APK_NAME=\$(wget -qO- \$ALPINE_REPO/ | grep -o 'openssl-dev-[0-9.]\+-r[0-9]\+.apk' | head -n 1)
-              SSL_VER=\$(echo \$SSL_APK_NAME | sed 's/openssl-dev-//;s/.apk//')
-              echo \"Detected OpenSSL Version: \$SSL_VER\"
-              
-              mkdir -p /tmp/ssl_setup && cd /tmp/ssl_setup
-              wget -q \$ALPINE_REPO/openssl-libs-static-\$SSL_VER.apk
-              wget -q \$ALPINE_REPO/openssl-dev-\$SSL_VER.apk
-              
-              for f in *.apk; do tar -xf \$f -C /crossrootfs/arm64; done
-              cd /workspace
-              
-              export CROSS_COMPILE_PREFIX=\"aarch64-alpine-linux-musl-\"
-              export CC=\"clang\"
-              export CXX=\"clang++\"
-              
-              export OPENSSL_ROOT_DIR=\"/crossrootfs/arm64/usr\"
-              export OPENSSL_USE_STATIC_LIBS=TRUE
-              
-              export CFLAGS=\"--sysroot=/crossrootfs/arm64 --target=aarch64-alpine-linux-musl\"
-          
+              apk add --no-cache bash wget tar clang build-base cmake icu-dev icu-data-full zlib-static openssl-dev openssl-libs-static
+  
               DOTNET_SDK_VERSION='${{ env.DOTNET_SDK_VERSION }}'
-              DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-x64.tar.gz\"
+              DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-musl-arm64.tar.gz\"
               wget -nv \"\$DOTNET_SDK_URL\" -O dotnet-sdk.tar.gz
               mkdir -p /opt/dotnet
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
           
-              which clang || echo 'clang not found'
-              clang --version || echo 'clang version check failed'
-          
-              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release \
-                -p:SysRoot=/crossrootfs/arm64 \
-                -p:CppCompilerAndLinker=clang \
-                -p:StripSymbols=true \
-                -o /workspace/artifact
+              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -o /workspace/artifact
             "
 
       - name: Package [linux-arm64]
@@ -273,7 +249,7 @@ jobs:
           cd artifact
           tar -czvf ../N_m3u8DL-RE_${{ needs.set-date.outputs.tag }}_linux-arm64_${{ needs.set-date.outputs.date }}.tar.gz N_m3u8DL-RE
 
-      - name: Upload Artifact [linux-x64]
+      - name: Upload Artifact [linux-arm64]
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64
