@@ -49,6 +49,14 @@ internal class MyOption
     /// </summary>
     public bool NoDateInfo { get; set; }
     /// <summary>
+    /// See: <see cref="CommandInvoker.CopyrightInfo"/>.
+    /// </summary>
+    public string? CopyrightInfo { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.CommnetInfo"/>.
+    /// </summary>
+    public string? CommnetInfo { get; set; }
+    /// <summary>
     /// See: <see cref="CommandInvoker.NoLog"/>.
     /// </summary>
     public bool NoLog { get; set; }
@@ -136,6 +144,14 @@ internal class MyOption
     /// See: <see cref="CommandInvoker.MP4RealTimeDecryption"/>.
     /// </summary>
     public bool MP4RealTimeDecryption { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.SkipSubtitleDecrypt"/>.
+    /// </summary>
+    public bool SkipSubtitleDecrypt { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.SkipAudioDecrypt"/>.
+    /// </summary>
+    public bool SkipAudioDecrypt { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.UseShakaPackager"/>.
     /// </summary>

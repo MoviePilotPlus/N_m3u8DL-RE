@@ -1,4 +1,4 @@
-﻿using N_m3u8DL_RE.Parser.Config;
+using N_m3u8DL_RE.Parser.Config;
 using N_m3u8DL_RE.Common.Entity;
 using N_m3u8DL_RE.Common.Enum;
 using N_m3u8DL_RE.Common.Log;
@@ -558,6 +558,54 @@ internal class HLSExtractor : IExtractor
                 var b = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".vtt") || m.Url.Contains(".webvtt")));
                 if (a) lists[i].Extension = "ttml";
                 if (b) lists[i].Extension = "vtt";
+                
+                // 字幕流不解密，清除加密信息
+                if (lists[i].Playlist != null && ParserConfig.SkipSubtitleDecrypt)
+                {
+                    // 清除MediaInit的加密信息
+                    if (lists[i].Playlist.MediaInit != null)
+                    {
+                        lists[i].Playlist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                        lists[i].Playlist.MediaInit.EncryptInfo.Key = null;
+                        lists[i].Playlist.MediaInit.EncryptInfo.IV = null;
+                    }
+                    // 清除所有MediaParts中MediaSegments的加密信息
+                    foreach (var mediaPart in lists[i].Playlist.MediaParts)
+                    {
+                        foreach (var segment in mediaPart.MediaSegments)
+                        {
+                            segment.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                            segment.EncryptInfo.Key = null;
+                            segment.EncryptInfo.IV = null;
+                        }
+                    }
+                }
+            }
+            else if (lists[i].MediaType == MediaType.AUDIO)
+            {
+                lists[i].Extension = lists[i].Playlist!.MediaInit != null ? "m4s" : "ts";
+                
+                // 音频流不解密，清除加密信息
+                if (lists[i].Playlist != null && ParserConfig.SkipAudioDecrypt)
+                {
+                    // 清除MediaInit的加密信息
+                    if (lists[i].Playlist.MediaInit != null)
+                    {
+                        lists[i].Playlist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                        lists[i].Playlist.MediaInit.EncryptInfo.Key = null;
+                        lists[i].Playlist.MediaInit.EncryptInfo.IV = null;
+                    }
+                    // 清除所有MediaParts中MediaSegments的加密信息
+                    foreach (var mediaPart in lists[i].Playlist.MediaParts)
+                    {
+                        foreach (var segment in mediaPart.MediaSegments)
+                        {
+                            segment.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                            segment.EncryptInfo.Key = null;
+                            segment.EncryptInfo.IV = null;
+                        }
+                    }
+                }
             }
             else
             {

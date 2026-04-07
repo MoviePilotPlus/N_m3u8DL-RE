@@ -104,7 +104,7 @@ internal class SimpleDownloadManager
         }
 
         var type = streamSpec.MediaType ?? Common.Enum.MediaType.VIDEO;
-        var dirName = $"{task.Id}_{OtherUtil.GetValidFileName(streamSpec.GroupId ?? "", "-")}_{streamSpec.Codecs}_{streamSpec.Bandwidth}_{streamSpec.Language}";
+        var dirName = $"{task.Id}_{OtherUtil.GetValidFileName(streamSpec.GroupId ?? "", "-")}_{streamSpec.Codecs}_{streamSpec.Bandwidth}{streamSpec.Bandwidth}_{streamSpec.Language}";
         var tmpDir = Path.Combine(DownloaderConfig.DirPrefix, dirName);
         var saveDir = DownloaderConfig.MyOptions.SaveDir ?? Environment.CurrentDirectory;
 
@@ -116,7 +116,7 @@ internal class SimpleDownloadManager
         }
         else if (DownloaderConfig.MyOptions.SaveName != null)
         {
-            saveName = $"{DownloaderConfig.MyOptions.SaveName}.{streamSpec.Language}".TrimEnd('.');
+            saveName = $"{DownloaderConfig.MyOptions.SaveName}.{streamSpec.Language}.{streamSpec.Name}".TrimEnd('.');
         }
         var headers = DownloaderConfig.Headers;
 
@@ -583,7 +583,7 @@ internal class SimpleDownloadManager
                         };
                     }
                 }
-                mergeSuccess = MergeUtil.MergeByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, files, Path.ChangeExtension(ffOut, null), ext, useAACFilter, writeDate: !DownloaderConfig.MyOptions.NoDateInfo, useConcatDemuxer: DownloaderConfig.MyOptions.UseFFmpegConcatDemuxer);
+                mergeSuccess = MergeUtil.MergeByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, files, Path.ChangeExtension(ffOut, null), ext, useAACFilter, writeDate: !DownloaderConfig.MyOptions.NoDateInfo, useConcatDemuxer: DownloaderConfig.MyOptions.UseFFmpegConcatDemuxer, copyright: DownloaderConfig.MyOptions.CopyrightInfo ?? "", comment: DownloaderConfig.MyOptions.CommnetInfo ?? "");
                 if (mergeSuccess) output = ffOut;
             }
         }
@@ -746,7 +746,7 @@ internal class SimpleDownloadManager
             Logger.WarnMarkUp($"Muxing to [grey]{outName.EscapeMarkup()}{ext}[/]");
             var result = false;
             if (DownloaderConfig.MyOptions.MuxOptions.UseMkvmerge) result = MergeUtil.MuxInputsByMkvmerge(DownloaderConfig.MyOptions.MkvmergeBinaryPath!, OutputFiles.ToArray(), outPath);
-            else result = MergeUtil.MuxInputsByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, OutputFiles.ToArray(), outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo);
+            else result = MergeUtil.MuxInputsByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, OutputFiles.ToArray(), outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo, DownloaderConfig.MyOptions.CopyrightInfo ?? "", DownloaderConfig.MyOptions.CommnetInfo ?? "");
             // 完成后删除各轨道文件
             if (result)
             {

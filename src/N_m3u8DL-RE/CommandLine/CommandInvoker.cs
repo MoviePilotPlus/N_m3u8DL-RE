@@ -51,6 +51,8 @@ internal static partial class CommandInvoker
     private static readonly Option<bool> SkipMerge = new Option<bool>("--skip-merge") { Description = ResString.cmd_skipMerge }.WithDefault(false);
     private static readonly Option<bool> SkipDownload = new Option<bool>("--skip-download") { Description = ResString.cmd_skipDownload }.WithDefault(false);
     private static readonly Option<bool> NoDateInfo = new Option<bool>("--no-date-info") { Description = ResString.cmd_noDateInfo }.WithDefault(false);
+    private static readonly Option<string?> CopyrightInfo = new("--copyright-info") { Description = "版权信息" };
+    private static readonly Option<string?> CommnetInfo = new("--commnet-info") { Description = "注释信息" };
     private static readonly Option<bool> BinaryMerge = new Option<bool>("--binary-merge") { Description = ResString.cmd_binaryMerge }.WithDefault(false);
     private static readonly Option<bool> UseFFmpegConcatDemuxer = new Option<bool>("--use-ffmpeg-concat-demuxer") { Description = ResString.cmd_useFFmpegConcatDemuxer }.WithDefault(false);
     private static readonly Option<bool> DelAfterDone = new Option<bool>("--del-after-done") { Description = ResString.cmd_delAfterDone }.WithDefault(true);
@@ -59,6 +61,8 @@ internal static partial class CommandInvoker
     private static readonly Option<bool> WriteMetaJson = new Option<bool>("--write-meta-json") { Description = ResString.cmd_writeMetaJson }.WithDefault(true);
     private static readonly Option<bool> AppendUrlParams = new Option<bool>("--append-url-params") { Description = ResString.cmd_appendUrlParams }.WithDefault(false);
     private static readonly Option<bool> MP4RealTimeDecryption = new Option<bool>("--mp4-real-time-decryption") { Description = ResString.cmd_MP4RealTimeDecryption }.WithDefault(false);
+    private static readonly Option<bool> SkipSubtitleDecrypt = new Option<bool>("--skip-subtitle-decrypt") { Description = "跳过字幕流解密" }.WithDefault(true);
+    private static readonly Option<bool> SkipAudioDecrypt = new Option<bool>("--skip-audio-decrypt") { Description = "跳过音频流解密" }.WithDefault(true);
     private static readonly Option<bool> UseShakaPackager = new Option<bool>("--use-shaka-packager") { Hidden = true, Description = ResString.cmd_useShakaPackager }.WithDefault(false);
     private static readonly Option<DecryptEngine> DecryptionEngine = new ("--decryption-engine") { Description = ResString.cmd_decryptionEngine, DefaultValueFactory = _ => DecryptEngine.MP4DECRYPT };
     private static readonly Option<bool> ForceAnsiConsole = new("--force-ansi-console") { Description = ResString.cmd_forceAnsiConsole };
@@ -639,6 +643,8 @@ internal static partial class CommandInvoker
             Keys = result.GetValue(Keys),
             UrlProcessorArgs = result.GetValue(UrlProcessorArgs),
             MP4RealTimeDecryption = result.GetValue(MP4RealTimeDecryption),
+            SkipSubtitleDecrypt = result.GetValue(SkipSubtitleDecrypt),
+            SkipAudioDecrypt = result.GetValue(SkipAudioDecrypt),
             UseShakaPackager = result.GetValue(UseShakaPackager),
             DecryptionEngine = result.GetValue(DecryptionEngine),
             DecryptionBinaryPath = result.GetValue(DecryptionBinaryPath),
@@ -668,6 +674,8 @@ internal static partial class CommandInvoker
             LiveWaitTime = result.GetValue(LiveWaitTime),
             LiveTakeCount = result.GetValue(LiveTakeCount),
             NoDateInfo = result.GetValue(NoDateInfo),
+            CopyrightInfo = result.GetValue(CopyrightInfo),
+            CommnetInfo = result.GetValue(CommnetInfo),
             NoLog = result.GetValue(NoLog),
             AllowHlsMultiExtMap = result.GetValue(AllowHlsMultiExtMap),
             AdKeywords = result.GetValue(AdKeywords),
@@ -726,9 +734,9 @@ internal static partial class CommandInvoker
         var rootCommand = new RootCommand(VERSION_INFO)
         {
             Input, TmpDir, SaveDir, SaveName, SavePattern, LogFilePath, BaseUrl, ThreadCount, DownloadRetryCount, HttpRequestTimeout, ForceAnsiConsole, NoAnsiColor,AutoSelect, SkipMerge, SkipDownload, CheckSegmentsCount,
-            BinaryMerge, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, SubOnly, SubtitleFormat, AutoSubtitleFix,
+            BinaryMerge, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, CopyrightInfo, CommnetInfo, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, SubOnly, SubtitleFormat, AutoSubtitleFix,
             FFmpegBinaryPath,
-            LogLevel, UILanguage, UrlProcessorArgs, Keys, KeyTextFile, DecryptionEngine, DecryptionBinaryPath, UseShakaPackager, MP4RealTimeDecryption,
+            LogLevel, UILanguage, UrlProcessorArgs, Keys, KeyTextFile, DecryptionEngine, DecryptionBinaryPath, UseShakaPackager, MP4RealTimeDecryption, SkipSubtitleDecrypt, SkipAudioDecrypt,
             MaxSpeed,
             MuxAfterDone,
             CustomHLSMethod, CustomHLSKey, CustomHLSIv, UseSystemProxy, CustomProxy, CustomRange, TaskStartAt,

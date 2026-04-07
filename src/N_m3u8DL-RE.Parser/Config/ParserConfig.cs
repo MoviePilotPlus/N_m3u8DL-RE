@@ -1,4 +1,4 @@
-﻿using N_m3u8DL_RE.Common.Enum;
+using N_m3u8DL_RE.Common.Enum;
 using N_m3u8DL_RE.Parser.Processor;
 using N_m3u8DL_RE.Parser.Processor.DASH;
 using N_m3u8DL_RE.Parser.Processor.HLS;
@@ -66,4 +66,14 @@ public class ParserConfig
     /// KEY重试次数
     /// </summary>
     public int KeyRetryCount { get; set; } = 3;
+
+    /// <summary>
+    /// 跳过字幕流解密
+    /// </summary>
+    public bool SkipSubtitleDecrypt { get; set; } = false;
+
+    /// <summary>
+    /// 跳过音频流解密
+    /// </summary>
+    public bool SkipAudioDecrypt { get; set; } = false;
 }

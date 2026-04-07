@@ -201,6 +201,8 @@ internal class Program
             CustomMethod = option.CustomHLSMethod,
             CustomeKey = option.CustomHLSKey,
             CustomeIV = option.CustomHLSIv,
+            SkipSubtitleDecrypt = option.SkipSubtitleDecrypt,
+            SkipAudioDecrypt = option.SkipAudioDecrypt,
         };
 
         if (option.AllowHlsMultiExtMap)

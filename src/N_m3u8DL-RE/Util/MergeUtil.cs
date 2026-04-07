@@ -1,4 +1,4 @@
-﻿using N_m3u8DL_RE.Common.Log;
+using N_m3u8DL_RE.Common.Log;
 using N_m3u8DL_RE.Entity;
 using Spectre.Console;
 using System.Diagnostics;
@@ -171,7 +171,7 @@ internal static class MergeUtil
         return code == 0;
     }
 
-    public static bool MuxInputsByFFmpeg(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo)
+    public static bool MuxInputsByFFmpeg(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, string copyright = "", string comment = "")
     {
         var ext = OtherUtil.GetMuxExtension(muxFormat);
         string dateString = DateTime.Now.ToString("o");
@@ -241,6 +241,8 @@ internal static class MergeUtil
         }
 
         if (dateinfo) command.Append($" -metadata date=\"{dateString}\" ");
+        if (!string.IsNullOrEmpty(copyright)) command.Append($" -metadata copyright=\"{copyright}\" ");
+        if (!string.IsNullOrEmpty(comment)) command.Append($" -metadata comment=\"{comment}\" ");
         command.Append($" -ignore_unknown -copy_unknown ");
         command.Append($" \"{outputPath}{ext}\"");
 
