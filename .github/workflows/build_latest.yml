@@ -223,7 +223,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
-      - run: dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true -p:StripSymbols=false -c Release -o artifact
+      - run: dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true -p:StripSymbols=false -p:UseSystemCrypto=true -c Release -o artifact
 
       - name: Package [linux-arm64]
         run: |
