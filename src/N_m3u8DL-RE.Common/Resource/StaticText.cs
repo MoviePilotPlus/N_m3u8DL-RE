@@ -1,4 +1,4 @@
-﻿namespace N_m3u8DL_RE.Common.Resource;
+namespace N_m3u8DL_RE.Common.Resource;
 
 internal static class StaticText
 {
@@ -495,6 +495,36 @@ internal static class StaticText
             zhCN: "并发下载已选择的音频、视频和字幕",
             zhTW: "並發下載已選擇的音訊、影片和字幕",
             enUS: "Concurrently download the selected audio, video and subtitles"
+        ),
+        ["cmd_copyrightInfo"] = new TextContainer
+        (
+            zhCN: "设置版权信息",
+            zhTW: "設置版權信息",
+            enUS: "Set copyright information"
+        ),
+        ["cmd_commnetInfo"] = new TextContainer
+        (
+            zhCN: "设置注释信息",
+            zhTW: "設置註釋信息",
+            enUS: "Set comment information"
+        ),
+        ["cmd_skipSubtitleDecrypt"] = new TextContainer
+        (
+            zhCN: "跳过字幕流解密",
+            zhTW: "跳過字幕流解密",
+            enUS: "Skip subtitle stream decryption"
+        ),
+        ["cmd_skipAudioDecrypt"] = new TextContainer
+        (
+            zhCN: "跳过音频流解密",
+            zhTW: "跳過音訊流解密",
+            enUS: "Skip audio stream decryption"
+        ),
+        ["cmd_forceMuxDolby"] = new TextContainer
+        (
+            zhCN: "强制对杜比视界内容进行混流",
+            zhTW: "強制對杜比視界內容進行混流",
+            enUS: "Force muxing for Dolby Vision content"
         ),
         ["cmd_selectVideo"] = new TextContainer
         (

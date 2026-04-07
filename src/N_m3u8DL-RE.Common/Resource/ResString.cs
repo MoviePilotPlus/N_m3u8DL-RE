@@ -1,4 +1,4 @@
-﻿namespace N_m3u8DL_RE.Common.Resource;
+namespace N_m3u8DL_RE.Common.Resource;
 
 public static class ResString
 {
@@ -81,6 +81,11 @@ public static class ResString
     public static string cmd_useShakaPackager => GetText("cmd_useShakaPackager");
     public static string cmd_decryptionEngine => GetText("cmd_decryptionEngine");
     public static string cmd_concurrentDownload => GetText("cmd_concurrentDownload");
+    public static string cmd_copyrightInfo => GetText("cmd_copyrightInfo");
+    public static string cmd_commnetInfo => GetText("cmd_commnetInfo");
+    public static string cmd_skipSubtitleDecrypt => GetText("cmd_skipSubtitleDecrypt");
+    public static string cmd_skipAudioDecrypt => GetText("cmd_skipAudioDecrypt");
+    public static string cmd_forceMuxDolby => GetText("cmd_forceMuxDolby");
     public static string cmd_useSystemProxy => GetText("cmd_useSystemProxy");
     public static string cmd_customProxy => GetText("cmd_customProxy");
     public static string cmd_customRange => GetText("cmd_customRange");

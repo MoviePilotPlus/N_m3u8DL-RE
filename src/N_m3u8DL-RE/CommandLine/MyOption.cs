@@ -153,6 +153,10 @@ internal class MyOption
     /// </summary>
     public bool SkipAudioDecrypt { get; set; }
     /// <summary>
+    /// See: <see cref="CommandInvoker.ForceMuxDolby"/>.
+    /// </summary>
+    public bool ForceMuxDolby { get; set; }
+    /// <summary>
     /// See: <see cref="CommandInvoker.UseShakaPackager"/>.
     /// </summary>
     [Obsolete("Use DecryptionEngine instead")]
