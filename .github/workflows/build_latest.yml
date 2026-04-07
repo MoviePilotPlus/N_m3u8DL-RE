@@ -241,7 +241,7 @@ jobs:
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
           
-              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -o /workspace/artifact
+              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -p:IlcDisableParallelism=true -o /workspace/artifact
             "
 
       - name: Package [linux-arm64]
