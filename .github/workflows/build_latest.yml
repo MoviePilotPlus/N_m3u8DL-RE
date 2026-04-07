@@ -236,16 +236,7 @@ jobs:
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
   
-              apk add --no-cache curl
-              curl -L -o /tmp/arm64-cross-tools.tar.gz https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.4/clang+llvm-19.1.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-              mkdir -p /opt/arm64-cross-tools
-              tar -xf /tmp/arm64-cross-tools.tar.gz -C /opt/arm64-cross-tools --strip-components=1
-              export PATH=\"/opt/arm64-cross-tools/bin:\$PATH\"
-  
-              export CC=\"clang --target=aarch64-linux-musl\"
-              export CXX=\"clang++ --target=aarch64-linux-musl\"
-  
-              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -o /workspace/artifact
+              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -p:PublishAotUsingRuntimePack=true -p:DisableUnsupportedError=true -o /workspace/artifact
             "
 
       - name: Package [linux-arm64]
