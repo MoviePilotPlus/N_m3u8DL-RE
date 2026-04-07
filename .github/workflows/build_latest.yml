@@ -210,7 +210,7 @@ jobs:
           path: N_m3u8DL-RE_${{ needs.set-date.outputs.tag }}_linux-x64_${{ needs.set-date.outputs.date }}.tar.gz
 
   build-linux-arm64:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: set-date
 
     steps:
@@ -218,26 +218,12 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref }}
 
-      - name: Build arm64 in alpine container
-        run: |
-          docker run --rm \
-            -v "$PWD:/workspace" \
-            -w /workspace \
-            alpine:3.21 \
-            sh -c "
-              set -e
-          
-              apk add --no-cache bash wget tar clang build-base cmake icu-dev icu-data-full zlib-static openssl-dev openssl-libs-static
-  
-              DOTNET_SDK_VERSION='${{ env.DOTNET_SDK_VERSION }}'
-              DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-musl-x64.tar.gz\"
-              wget -nv \"\$DOTNET_SDK_URL\" -O dotnet-sdk.tar.gz
-              mkdir -p /opt/dotnet
-              tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
-              export PATH=\"/opt/dotnet:\$PATH\"
-  
-              dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -c Release -p:StripSymbols=false -p:PublishAotUsingRuntimePack=true -p:DisableUnsupportedError=true -o /workspace/artifact
-            "
+      - name: Set up dotnet
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
+
+      - run: dotnet publish src/N_m3u8DL-RE -r linux-musl-arm64 -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true -c Release -o artifact
 
       - name: Package [linux-arm64]
         run: |
