@@ -23,7 +23,7 @@ impl I18n {
         }
     }
     
-    pub fn get<'a>(&'a self, key: &str) -> &'a str {
+    pub fn get<'a>(&'a self, key: &'a str) -> &'a str {
         self.translations.get(key).map_or(key, |v| v.as_str())
     }
 }

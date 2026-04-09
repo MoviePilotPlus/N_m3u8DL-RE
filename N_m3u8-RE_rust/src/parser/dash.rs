@@ -99,7 +99,7 @@ impl DASHExtractor {
             
             for representation in adaptation_set.representation {
                 let mut stream = StreamSpec::default();
-                stream.id = representation.id;
+                stream.id = representation.id.clone();
                 stream.media_type = media_type.clone();
                 stream.codecs = representation.codecs.clone().unwrap_or(adaptation_set.codecs.clone().unwrap_or(String::new()));
                 stream.language = adaptation_set.lang.clone();

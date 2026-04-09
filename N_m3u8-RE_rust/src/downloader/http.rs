@@ -65,7 +65,7 @@ impl HttpUtil {
         Ok(())
     }
     
-    pub async fn head(&self, url: &str) -> Result<reqwest::Response, Box<dyn std::error::Error>> {
+    pub async fn head(&self, url: &str) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
         let mut headers = HeaderMap::new();
         for (key, value) in &self.headers {
             let header_name = HeaderName::try_from(key)?;

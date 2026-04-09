@@ -152,7 +152,7 @@ pub fn parse_args() -> MyOption {
         )
         .arg(
             Arg::new("concurrent-download")
-                .short("mt")
+
                 .long("concurrent-download")
                 .help("并发下载已选择的音频、视频和字幕")
                 .action(ArgAction::SetTrue)
@@ -361,42 +361,42 @@ pub fn parse_args() -> MyOption {
         )
         .arg(
             Arg::new("select-video")
-                .short("sv")
+
                 .long("select-video")
                 .help("通过正则表达式选择符合要求的视频流")
                 .value_name("OPTIONS")
         )
         .arg(
             Arg::new("select-audio")
-                .short("sa")
+
                 .long("select-audio")
                 .help("通过正则表达式选择符合要求的音频流")
                 .value_name("OPTIONS")
         )
         .arg(
             Arg::new("select-subtitle")
-                .short("ss")
+
                 .long("select-subtitle")
                 .help("通过正则表达式选择符合要求的字幕流")
                 .value_name("OPTIONS")
         )
         .arg(
             Arg::new("drop-video")
-                .short("dv")
+
                 .long("drop-video")
                 .help("通过正则表达式去除符合要求的视频流")
                 .value_name("OPTIONS")
         )
         .arg(
             Arg::new("drop-audio")
-                .short("da")
+
                 .long("drop-audio")
                 .help("通过正则表达式去除符合要求的音频流")
                 .value_name("OPTIONS")
         )
         .arg(
             Arg::new("drop-subtitle")
-                .short("ds")
+
                 .long("drop-subtitle")
                 .help("通过正则表达式去除符合要求的字幕流")
                 .value_name("OPTIONS")

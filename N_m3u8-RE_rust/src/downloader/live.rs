@@ -99,7 +99,7 @@ impl LiveDownloadManager {
         pb.set_style(ProgressStyle::default_spinner()
             .template("{spinner:.green} [{elapsed_precise}] {msg}")?
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]));
-        pb.set_message(format!("录制 {}...", stream.id).as_str());
+        pb.set_message(format!("录制 {}...", stream.id));
         
         let mut segment_index = 0;
         let mut downloaded_segments = std::collections::HashSet::new();
@@ -159,7 +159,7 @@ impl LiveDownloadManager {
             sleep(Duration::from_secs(wait)).await;
         }
         
-        pb.finish_with_message(format!("{} 录制完成", stream.id).as_str());
+        pb.finish_with_message(format!("{} 录制完成", stream.id));
         
         Ok(())
     }

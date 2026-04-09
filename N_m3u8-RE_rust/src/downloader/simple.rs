@@ -78,7 +78,7 @@ impl SimpleDownloadManager {
                 .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}")?
                 .progress_chars("█▓▒░"));
             
-            pb.set_message(&format!("下载 {}...", stream.id));
+            pb.set_message(format!("下载 {}...", stream.id));
             
             let mut segment_index = 0;
             for (part_index, part) in playlist.media_parts.iter().enumerate() {
@@ -106,7 +106,7 @@ impl SimpleDownloadManager {
                 }
             }
             
-            pb.finish_with_message(&format!("{} 下载完成", stream.id));
+            pb.finish_with_message(format!("{} 下载完成", stream.id));
             
             // 合并分片
             Self::merge_segments(&stream_dir, &stream.id).await?;
