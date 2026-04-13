@@ -556,8 +556,10 @@ internal class HLSExtractor : IExtractor
             {
                 var a = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".ttml")));
                 var b = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".vtt") || m.Url.Contains(".webvtt")));
+                var c = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".srt")));
                 if (a) lists[i].Extension = "ttml";
                 if (b) lists[i].Extension = "vtt";
+                if (c) lists[i].Extension = "srt";
                 
                 // 字幕流不解密，清除加密信息
                 if (lists[i].Playlist != null && ParserConfig.SkipSubtitleDecrypt)

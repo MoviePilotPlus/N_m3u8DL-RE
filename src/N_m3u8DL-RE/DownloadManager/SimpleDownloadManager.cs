@@ -543,6 +543,49 @@ internal class SimpleDownloadManager
             };
         }
 
+        // 自动修复SRT raw字幕
+        if (DownloaderConfig.MyOptions.AutoSubtitleFix && streamSpec is { MediaType: Common.Enum.MediaType.SUBTITLES, Extension: not null } && streamSpec.Extension.Contains("srt")) 
+        {
+            Logger.WarnMarkUp(ResString.fixingVTT);
+            // 排序字幕并修正时间戳
+            bool first = true;
+            var finalVtt = new WebVttSub();
+            var keys = FileDic.Keys.OrderBy(k => k.Index);
+            foreach (var seg in keys)
+            {
+                var srtContent = File.ReadAllText(FileDic[seg]!.ActualFilePath);
+                var vtt = WebVttSub.ParseSrt(srtContent);
+                // 手动计算MPEGTS
+                if (finalVtt.MpegtsTimestamp == 0 && vtt.MpegtsTimestamp == 0)
+                {
+                    vtt.MpegtsTimestamp = 90000 * (long)(skippedDur + keys.Where(s => s.Index < seg.Index).Sum(s => s.Duration));
+                }
+                if (first) { finalVtt = vtt; first = false; }
+                else finalVtt.AddCuesFromOne(vtt);
+            }
+            // 写出字幕
+            var files = FileDic.OrderBy(s => s.Key.Index).Select(s => s.Value).Select(v => v!.ActualFilePath).ToArray();
+            foreach (var item in files) File.Delete(item);
+            FileDic.Clear();
+            var index = 0;
+            var path = Path.Combine(tmpDir, index.ToString(pad) + ".fix.vtt");
+            // 设置字幕偏移
+            finalVtt.LeftShiftTime(TimeSpan.FromSeconds(skippedDur));
+            var subContentFixed = finalVtt.ToVtt();
+            // 转换字幕格式
+            if (DownloaderConfig.MyOptions.SubtitleFormat != Enum.SubtitleFormat.VTT)
+            {
+                path = Path.ChangeExtension(path, ".srt");
+                subContentFixed = finalVtt.ToSrt();
+            }
+            await File.WriteAllTextAsync(path, subContentFixed, Encoding.UTF8);
+            FileDic[keys.First()] = new DownloadResult()
+            {
+                ActualContentLength = subContentFixed.Length,
+                ActualFilePath = path
+            };
+        }
+
         bool mergeSuccess = false;
         // 合并
         if (!DownloaderConfig.MyOptions.SkipMerge)

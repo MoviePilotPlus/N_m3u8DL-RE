@@ -265,4 +265,107 @@ public partial class WebVttSub
 
         return srt;
     }
+
+    /// <summary>
+    /// 从字符串解析SRT
+    /// </summary>
+    /// <param name="text"></param>
+    /// <returns></returns>
+    public static WebVttSub ParseSrt(string text, long BaseTimestamp = 0L)
+    {
+        text = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        text += "\n";
+
+        var webSub = new WebVttSub();
+        var needPayload = false;
+        var timeLine = "";
+        var payloads = new List<string>();
+        var lines = text.Split('\n');
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            
+            // 跳过空行
+            if (string.IsNullOrEmpty(line))
+            {
+                if (needPayload && payloads.Count > 0)
+                {
+                    var payload = string.Join(Environment.NewLine, payloads);
+                    if (!string.IsNullOrEmpty(payload.Trim()))
+                    {
+                        var arr = timeLine.Split(new[] { " --> " }, StringSplitOptions.None);
+                        var startTime = ConvertToTS(arr[0]);
+                        var endTime = ConvertToTS(arr[1]);
+                        webSub.Cues.Add(new SubCue()
+                        {
+                            StartTime = startTime,
+                            EndTime = endTime,
+                            Payload = string.Join("", payload.Where(c => c != 8203)), // Remove Zero Width Space!
+                            Settings = ""
+                        });
+                    }
+                    payloads.Clear();
+                    needPayload = false;
+                }
+                continue;
+            }
+
+            // 跳过序号行（纯数字）
+            if (int.TryParse(line, out _))
+            {
+                continue;
+            }
+
+            // 时间戳行
+            if (line.Contains(" --> "))
+            {
+                needPayload = true;
+                timeLine = line;
+                continue;
+            }
+
+            // 字幕内容
+            if (needPayload)
+            {
+                payloads.Add(line);
+            }
+        }
+
+        // 处理最后一个字幕（如果没有以空行结束）
+        if (needPayload && payloads.Count > 0)
+        {
+            var payload = string.Join(Environment.NewLine, payloads);
+            if (!string.IsNullOrEmpty(payload.Trim()))
+            {
+                var arr = timeLine.Split(new[] { " --> " }, StringSplitOptions.None);
+                var startTime = ConvertToTS(arr[0]);
+                var endTime = ConvertToTS(arr[1]);
+                webSub.Cues.Add(new SubCue()
+                {
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    Payload = string.Join("", payload.Where(c => c != 8203)), // Remove Zero Width Space!
+                    Settings = ""
+                });
+            }
+        }
+
+        if (BaseTimestamp == 0) return webSub;
+
+        foreach (var item in webSub.Cues)
+        {
+            if (item.StartTime.TotalMilliseconds - BaseTimestamp >= 0)
+            {
+                item.StartTime = TimeSpan.FromMilliseconds(item.StartTime.TotalMilliseconds - BaseTimestamp);
+                item.EndTime = TimeSpan.FromMilliseconds(item.EndTime.TotalMilliseconds - BaseTimestamp);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return webSub;
+    }
 }
