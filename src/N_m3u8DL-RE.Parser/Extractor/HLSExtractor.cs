@@ -533,6 +533,30 @@ internal class HLSExtractor : IExtractor
     {
         for (int i = 0; i < lists.Count; i++)
         {
+            // 检查是否为字幕流且URL指向SRT文件
+            if (lists[i].MediaType == MediaType.SUBTITLES && lists[i].Url != null && (lists[i].Url.Contains(".srt") || lists[i].Url.EndsWith(".srt")))
+            {
+                // 直接创建包含单个SRT segment的playlist
+                var segment = new MediaSegment
+                {
+                    Url = lists[i].Url,
+                    Index = 0,
+                    Duration = 0
+                };
+                var mediaPart = new MediaPart
+                {
+                    MediaSegments = new List<MediaSegment> { segment }
+                };
+                var playlist = new Playlist
+                {
+                    MediaParts = new List<MediaPart> { mediaPart },
+                    IsLive = false
+                };
+                lists[i].Playlist = playlist;
+                lists[i].Extension = "srt";
+                continue;
+            }
+
             try
             {
                 // 直接重新加载m3u8
