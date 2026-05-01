@@ -1,4 +1,4 @@
-﻿namespace N_m3u8DL_RE.Common.Enum;
+namespace N_m3u8DL_RE.Common.Enum;
 
 public enum EncryptMethod
 {
@@ -9,5 +9,6 @@ public enum EncryptMethod
     SAMPLE_AES_CTR,
     CENC,
     CHACHA20,
+    BBTS,
     UNKNOWN
 }

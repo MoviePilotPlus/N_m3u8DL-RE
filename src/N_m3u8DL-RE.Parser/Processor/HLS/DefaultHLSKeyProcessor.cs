@@ -1,4 +1,4 @@
-﻿using N_m3u8DL_RE.Common.Entity;
+using N_m3u8DL_RE.Common.Entity;
 using N_m3u8DL_RE.Common.Enum;
 using N_m3u8DL_RE.Common.Log;
 using N_m3u8DL_RE.Common.Resource;
@@ -42,19 +42,19 @@ public class DefaultHLSKeyProcessor : KeyProcessor
             {
                 encryptInfo.Key = parserConfig.CustomeKey;
             }
-            else if (uri.ToLower().StartsWith("base64:"))
+            else if (!string.IsNullOrEmpty(uri) && uri.ToLower().StartsWith("base64:"))
             {
                 encryptInfo.Key = Convert.FromBase64String(uri[7..]);
             }
-            else if (uri.ToLower().StartsWith("data:;base64,"))
+            else if (!string.IsNullOrEmpty(uri) && uri.ToLower().StartsWith("data:;base64,"))
             {
                 encryptInfo.Key = Convert.FromBase64String(uri[13..]);
             }
-            else if (uri.ToLower().StartsWith("data:text/plain;base64,"))
+            else if (!string.IsNullOrEmpty(uri) && uri.ToLower().StartsWith("data:text/plain;base64,"))
             {
                 encryptInfo.Key = Convert.FromBase64String(uri[23..]);
             }
-            else if (File.Exists(uri))
+            else if (!string.IsNullOrEmpty(uri) && File.Exists(uri))
             {
                 encryptInfo.Key = File.ReadAllBytes(uri);
             }

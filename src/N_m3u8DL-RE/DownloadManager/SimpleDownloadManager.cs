@@ -1,9 +1,10 @@
-﻿using Mp4SubtitleParser;
+using Mp4SubtitleParser;
 using N_m3u8DL_RE.Column;
 using N_m3u8DL_RE.Common.Entity;
 using N_m3u8DL_RE.Common.Enum;
 using N_m3u8DL_RE.Common.Log;
 using N_m3u8DL_RE.Common.Resource;
+using N_m3u8DL_RE.Common.Util;
 using N_m3u8DL_RE.Config;
 using N_m3u8DL_RE.Downloader;
 using N_m3u8DL_RE.Entity;
@@ -586,6 +587,93 @@ internal class SimpleDownloadManager
                 mergeSuccess = MergeUtil.MergeByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, files, Path.ChangeExtension(ffOut, null), ext, useAACFilter, writeDate: !DownloaderConfig.MyOptions.NoDateInfo, useConcatDemuxer: DownloaderConfig.MyOptions.UseFFmpegConcatDemuxer, copyright: DownloaderConfig.MyOptions.CopyrightInfo ?? "", comment: DownloaderConfig.MyOptions.CommnetInfo ?? "");
                 if (mergeSuccess) output = ffOut;
             }
+
+            // 检测并解密BBTS
+            if (mergeSuccess && File.Exists(output))
+            {
+                bool isBBTS = false;
+                // 检测加密方式是否为BBTS (任意一个片段是BBTS即可)
+                bool anyBbtS = false;
+                if (streamSpec.Playlist != null)
+                {
+                    foreach (var part in streamSpec.Playlist.MediaParts)
+                    {
+                        foreach (var segment in part.MediaSegments)
+                        {
+                            if (segment.EncryptInfo.Method == Common.Enum.EncryptMethod.BBTS)
+                            {
+                                anyBbtS = true;
+                                break;
+                            }
+                        }
+                        if (anyBbtS) break;
+                    }
+                }
+                if (anyBbtS)
+                {
+                    isBBTS = true;
+                }
+                // 检测分片URL是否包含.bbts后缀
+                else
+                {
+                    var firstSegment = streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault();
+                    if (firstSegment?.Url != null && firstSegment.Url.EndsWith(".bbts", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isBBTS = true;
+                    }
+                }
+                // 检测用户是否显式指定了 --custom-hls-method bbts
+                if (!isBBTS && DownloaderConfig.MyOptions.CustomHLSMethod == Common.Enum.EncryptMethod.BBTS)
+                {
+                    isBBTS = true;
+                }
+
+                if (isBBTS)
+                {
+                    byte[]? keyBytes = null;
+                    
+                    // 优先使用 CustomHLSKey，因为 --custom-hls-key 已经是字节数组
+                    if (DownloaderConfig.MyOptions.CustomHLSKey != null)
+                    {
+                        keyBytes = DownloaderConfig.MyOptions.CustomHLSKey;
+                    }
+                    // 如果没有 CustomHLSKey，再尝试 Keys
+                    else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
+                    {
+                        var keyHex = DownloaderConfig.MyOptions.Keys.First();
+                        if (keyHex != null && HexUtil.TryParseHexString(keyHex, out var bytes))
+                        {
+                            keyBytes = bytes;
+                        }
+                    }
+
+                    if (keyBytes != null)
+                    {
+                        var enc = output;
+                        var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
+                        Logger.InfoMarkUp("[grey]Decrypting BBTS...[/]");
+
+                        try
+                        {
+                            Crypto.BBTSDecryptionUtil.DecryptFile(enc, dec, keyBytes);
+
+                            if (File.Exists(dec))
+                            {
+                                File.Delete(enc);
+                                File.Move(dec, enc);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorMarkUp($"[red]BBTS decryption failed: {ex.Message}[/]");
+                        }
+                    }
+                    else
+                    {
+                        Logger.WarnMarkUp("[yellow]No BBTS key provided! Skip decryption![/]");
+                    }
+                }
+            }
         }
 
         // 删除临时文件夹
@@ -600,7 +688,7 @@ internal class SimpleDownloadManager
         }
 
         // 重新读取init信息
-        if (mergeSuccess && totalCount >= 1 && string.IsNullOrEmpty(currentKID) && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.NONE)
+        if (mergeSuccess && totalCount >= 1 && string.IsNullOrEmpty(currentKID) && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.NONE && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS)
         {
             currentKID = MP4DecryptUtil.GetMP4Info(output).KID;
             // try shaka packager, which can handle WebM
@@ -612,7 +700,7 @@ internal class SimpleDownloadManager
         }
 
         // 调用mp4decrypt解密
-        if (mergeSuccess && File.Exists(output) && !string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions is { MP4RealTimeDecryption: false, Keys.Length: > 0 })
+        if (mergeSuccess && File.Exists(output) && !string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions is { MP4RealTimeDecryption: false, Keys.Length: > 0 } && streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault()?.EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS)
         {
             var enc = output;
             var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));

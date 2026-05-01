@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using N_m3u8DL_RE.Parser.Config;
 using N_m3u8DL_RE.Common.Entity;
 using N_m3u8DL_RE.Common.Enum;

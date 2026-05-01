@@ -400,6 +400,21 @@ internal class HLSExtractor : IExtractor
             {
                 var segUrl = PreProcessUrl(ParserUtil.CombineURL(BaseUrl, line));
                 segment.Url = segUrl;
+                
+                // 自动检测 BBTS 加密
+                if (currentEncryptInfo.Method == EncryptMethod.NONE && segUrl.Contains(".bbts", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentEncryptInfo.Method = EncryptMethod.BBTS;
+                }
+                
+                // 如果当前加密方式是 BBTS，就给分片也设置上
+                if (currentEncryptInfo.Method == EncryptMethod.BBTS)
+                {
+                    segment.EncryptInfo.Method = currentEncryptInfo.Method;
+                    segment.EncryptInfo.Key = currentEncryptInfo.Key;
+                    segment.EncryptInfo.IV = currentEncryptInfo.IV ?? HexUtil.HexToBytes(Convert.ToString(segIndex, 16).PadLeft(32, '0'));
+                }
+                
                 segments.Add(segment);
                 segment = new();
                 // YK的广告分段则清除此分片
