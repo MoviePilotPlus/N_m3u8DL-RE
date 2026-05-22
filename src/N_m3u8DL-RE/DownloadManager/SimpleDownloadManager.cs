@@ -1,4 +1,4 @@
-using Mp4SubtitleParser;
+﻿using Mp4SubtitleParser;
 using N_m3u8DL_RE.Column;
 using N_m3u8DL_RE.Common.Entity;
 using N_m3u8DL_RE.Common.Enum;
@@ -673,10 +673,81 @@ internal class SimpleDownloadManager
                         Logger.WarnMarkUp("[yellow]No BBTS key provided! Skip decryption![/]");
                     }
                 }
-            }
-        }
 
-        // 删除临时文件夹
+                // 检测并解密 AES_128_YK
+                bool isAes128Yk = false;
+                if (!isBBTS)
+                {
+                    // 检测加密方式是否为 AES_128_YK
+                    foreach (var part in streamSpec.Playlist?.MediaParts ?? [])
+                    {
+                        foreach (var segment in part.MediaSegments)
+                        {
+                            if (segment.EncryptInfo.Method == Common.Enum.EncryptMethod.AES_128_YK)
+                            {
+                                isAes128Yk = true;
+                                break;
+                            }
+                        }
+                        if (isAes128Yk) break;
+                    }
+
+                    // 检测用户是否显式指定了 --custom-hls-method AES_128_YK
+                    if (!isAes128Yk && DownloaderConfig.MyOptions.CustomHLSMethod == Common.Enum.EncryptMethod.AES_128_YK)
+                    {
+                        isAes128Yk = true;
+                    }
+                }
+
+                if (isAes128Yk)
+                {
+                    byte[]? keyBytes = null;
+
+                    // 优先使用 CustomHLSKey
+                    if (DownloaderConfig.MyOptions.CustomHLSKey != null)
+                    {
+                        keyBytes = DownloaderConfig.MyOptions.CustomHLSKey;
+                    }
+                    // 如果没有 CustomHLSKey，再尝试 Keys
+                    else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
+                    {
+                        var keyHex = DownloaderConfig.MyOptions.Keys.First();
+                        if (keyHex != null && HexUtil.TryParseHexString(keyHex, out var bytes))
+                        {
+                            keyBytes = bytes;
+                        }
+                    }
+
+                    if (keyBytes != null)
+                    {
+                        var enc = output;
+                        var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
+                        Logger.InfoMarkUp("[grey]Decrypting AES_128_YK...[/]");
+
+                        try
+                        {
+                            Crypto.DeYKDecryptionUtil.DecryptFile(enc, dec, keyBytes);
+
+                            if (File.Exists(dec))
+                            {
+                                File.Delete(enc);
+                                File.Move(dec, enc);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorMarkUp($"[red]AES_128_YK decryption failed: {ex.Message}[/]");
+                        }
+                    }
+                    else
+                    {
+                        Logger.WarnMarkUp("[yellow]No AES_128_YK key provided! Skip decryption![/]");
+                    }
+                }
+            }
+            }
+
+            // 删除临时文件夹
         if (DownloaderConfig.MyOptions is { SkipMerge: false, DelAfterDone: true } && mergeSuccess)
         {
             var files = FileDic.Values.Select(v => v!.ActualFilePath);

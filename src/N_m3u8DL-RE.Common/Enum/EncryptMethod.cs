@@ -10,5 +10,6 @@ public enum EncryptMethod
     CENC,
     CHACHA20,
     BBTS,
+    AES_128_YK,
     UNKNOWN
 }
