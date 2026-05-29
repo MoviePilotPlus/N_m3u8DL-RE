@@ -17,7 +17,7 @@ internal static class DeYKDecryptionUtil
     private const byte SYNC_BYTE = 0x47;
 
     /// <summary>
-    /// 解密 TS 文件
+    /// 解密 TS 文件（流式处理，支持大文件）
     /// </summary>
     /// <param name="inputPath">输入文件路径</param>
     /// <param name="outputPath">输出文件路径</param>
@@ -29,33 +29,31 @@ internal static class DeYKDecryptionUtil
     }
 
     /// <summary>
-    /// 解密 TS 文件
+    /// 解密 TS 文件（流式处理，支持大文件）
     /// </summary>
     /// <param name="inputPath">输入文件路径</param>
     /// <param name="outputPath">输出文件路径</param>
     /// <param name="keyBytes">AES 密钥（16字节）</param>
     public static void DecryptFile(string inputPath, string outputPath, byte[] keyBytes)
     {
-        var inputBytes = File.ReadAllBytes(inputPath);
-        var outputBytes = DecryptTS(inputBytes, keyBytes);
-        File.WriteAllBytes(outputPath, outputBytes);
+        using var inputStream = File.OpenRead(inputPath);
+        using var outputStream = File.OpenWrite(outputPath);
+        DecryptTS(inputStream, outputStream, keyBytes);
     }
 
     /// <summary>
-    /// 解密 TS 数据流
+    /// 解密 TS 数据流（流式处理）
     /// </summary>
-    /// <param name="inputStream">输入数据</param>
+    /// <param name="inputStream">输入流</param>
+    /// <param name="outputStream">输出流</param>
     /// <param name="key">AES 密钥（16字节）</param>
-    /// <returns>解密后的数据</returns>
-    public static byte[] DecryptTS(byte[] inputStream, byte[] key)
+    public static void DecryptTS(Stream inputStream, Stream outputStream, byte[] key)
     {
         try
         {
-            var inputFileSize = inputStream.Length;
-            using var fileRead = new MemoryStream(inputStream);
-            using var fileReader = new BinaryReader(fileRead);
-            using var fileWrite = new MemoryStream();
-            using var fileWriter = new BinaryWriter(fileWrite);
+            long inputFileSize = inputStream.Length;
+            using var fileReader = new BinaryReader(inputStream);
+            using var fileWriter = new BinaryWriter(outputStream);
 
             int pid1 = -1;
             List<byte> pid1Buffer = new();
@@ -67,7 +65,7 @@ internal static class DeYKDecryptionUtil
             List<int> pid2Offset = new();
             List<byte> pid2PesPayload = new();
 
-            while (fileReader.BaseStream.Position < inputFileSize - 1)
+            do
             {
                 int loc1 = TS_PACKET_SIZE - 4;
                 var packetHeader = fileReader.ReadBytes(4);
@@ -156,12 +154,31 @@ internal static class DeYKDecryptionUtil
                         fileWriter.Write(fileReader.ReadBytes(loc1));
                     }
                 }
-            }
+            } while (fileReader.BaseStream.Position < inputFileSize - 1);
 
             FlushData(fileWriter, ref pid1Buffer, ref pid1Offset, ref pid1PesPayload, key);
             FlushData(fileWriter, ref pid2Buffer, ref pid2Offset, ref pid2PesPayload, key);
+        }
+        catch
+        {
+            // Ignore
+        }
+    }
 
-            return fileWrite.ToArray();
+    /// <summary>
+    /// 解密 TS 数据流（保留接口，用于向后兼容）
+    /// </summary>
+    /// <param name="inputStream">输入数据</param>
+    /// <param name="key">AES 密钥（16字节）</param>
+    /// <returns>解密后的数据</returns>
+    public static byte[] DecryptTS(byte[] inputStream, byte[] key)
+    {
+        try
+        {
+            using var msInput = new MemoryStream(inputStream);
+            using var msOutput = new MemoryStream();
+            DecryptTS(msInput, msOutput, key);
+            return msOutput.ToArray();
         }
         catch
         {
