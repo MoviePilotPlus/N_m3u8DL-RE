@@ -124,7 +124,8 @@ internal class HLSExtractor : IExtractor
             else if (line.StartsWith(HLSTags.ext_x_media))
             {
                 streamSpec = new();
-                var type = ParserUtil.GetAttribute(line, "TYPE").Replace("-", "_");
+                var type = ParserUtil.GetAttribute(line, "TYPE")?.Replace("-", "_");
+                if (string.IsNullOrEmpty(type)) continue;
                 if (Enum.TryParse<MediaType>(type, out var mediaType))
                 {
                     streamSpec.MediaType = mediaType;
@@ -219,7 +220,6 @@ internal class HLSExtractor : IExtractor
         bool isEndlist = false;
         long segIndex = 0;
         bool isAd = false;
-        long startIndex;
 
         Playlist playlist = new();
         List<MediaPart> mediaParts = [];
@@ -249,6 +249,7 @@ internal class HLSExtractor : IExtractor
             if (line.StartsWith(HLSTags.ext_x_byterange))
             {
                 var p = ParserUtil.GetAttribute(line);
+                if (string.IsNullOrEmpty(p)) continue;
                 var (n, o) = ParserUtil.GetRange(p);
                 segment.ExpectLength = n;
                 segment.StartRange = o ?? segments.Last().StartRange + segments.Last().ExpectLength;
@@ -280,12 +281,15 @@ internal class HLSExtractor : IExtractor
             else if (line.StartsWith(HLSTags.ext_x_media_sequence))
             {
                 segIndex = Convert.ToInt64(ParserUtil.GetAttribute(line));
-                startIndex = segIndex;
             }
             // program date time
             else if (line.StartsWith(HLSTags.ext_x_program_date_time))
             {
-                segment.DateTime = DateTime.Parse(ParserUtil.GetAttribute(line));
+                var dateTime = ParserUtil.GetAttribute(line);
+                if (!string.IsNullOrEmpty(dateTime))
+                {
+                    segment.DateTime = DateTime.Parse(dateTime);
+                }
             }
             // 解析不连续标记，需要单独合并（timestamp不同）
             else if (line.StartsWith(HLSTags.ext_x_discontinuity))
@@ -324,7 +328,9 @@ internal class HLSExtractor : IExtractor
             // 解析分片时长
             else if (line.StartsWith(HLSTags.extinf))
             {
-                string[] tmp = ParserUtil.GetAttribute(line).Split(',');
+                var extinf = ParserUtil.GetAttribute(line);
+                if (string.IsNullOrEmpty(extinf)) continue;
+                string[] tmp = extinf.Split(',');
                 segment.Duration = Convert.ToDouble(tmp[0]);
                 segment.Index = segIndex;
                 // 是否有加密，有的话写入KEY和IV
@@ -355,14 +361,18 @@ internal class HLSExtractor : IExtractor
             {
                 if (playlist.MediaInit == null || hasAd) 
                 {
+                    var mapUrl = ParserUtil.GetAttribute(line, "URI");
+                    if (string.IsNullOrEmpty(mapUrl)) continue;
+
                     playlist.MediaInit = new MediaSegment()
                     {
-                        Url = PreProcessUrl(ParserUtil.CombineURL(BaseUrl, ParserUtil.GetAttribute(line, "URI"))),
+                        Url = PreProcessUrl(ParserUtil.CombineURL(BaseUrl, mapUrl)),
                         Index = -1, // 便于排序
                     };
                     if (line.Contains("BYTERANGE"))
                     {
                         var p = ParserUtil.GetAttribute(line, "BYTERANGE");
+                        if (string.IsNullOrEmpty(p)) continue;
                         var (n, o) = ParserUtil.GetRange(p);
                         playlist.MediaInit.ExpectLength = n;
                         playlist.MediaInit.StartRange = o ?? 0L;
@@ -562,12 +572,12 @@ internal class HLSExtractor : IExtractor
                 {
                     MediaSegments = new List<MediaSegment> { segment }
                 };
-                var playlist = new Playlist
+                var srtPlaylist = new Playlist
                 {
                     MediaParts = new List<MediaPart> { mediaPart },
                     IsLive = false
                 };
-                lists[i].Playlist = playlist;
+                lists[i].Playlist = srtPlaylist;
                 lists[i].Extension = "srt";
                 continue;
             }
@@ -590,25 +600,28 @@ internal class HLSExtractor : IExtractor
             else
                 lists[i].Playlist = newPlaylist;
 
+            var streamPlaylist = lists[i].Playlist;
+            if (streamPlaylist == null) continue;
+
             if (lists[i].MediaType == MediaType.SUBTITLES)
             {
-                var a = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".ttml")));
-                var b = lists[i].Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".vtt") || m.Url.Contains(".webvtt")));
+                var a = streamPlaylist.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".ttml")));
+                var b = streamPlaylist.MediaParts.Any(p => p.MediaSegments.Any(m => m.Url.Contains(".vtt") || m.Url.Contains(".webvtt")));
                 if (a) lists[i].Extension = "ttml";
                 if (b) lists[i].Extension = "vtt";
                 
                 // 字幕流不解密，清除加密信息
-                if (lists[i].Playlist != null && ParserConfig.SkipSubtitleDecrypt)
+                if (ParserConfig.SkipSubtitleDecrypt)
                 {
                     // 清除MediaInit的加密信息
-                    if (lists[i].Playlist.MediaInit != null)
+                    if (streamPlaylist.MediaInit != null)
                     {
-                        lists[i].Playlist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
-                        lists[i].Playlist.MediaInit.EncryptInfo.Key = null;
-                        lists[i].Playlist.MediaInit.EncryptInfo.IV = null;
+                        streamPlaylist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                        streamPlaylist.MediaInit.EncryptInfo.Key = null;
+                        streamPlaylist.MediaInit.EncryptInfo.IV = null;
                     }
                     // 清除所有MediaParts中MediaSegments的加密信息
-                    foreach (var mediaPart in lists[i].Playlist.MediaParts)
+                    foreach (var mediaPart in streamPlaylist.MediaParts)
                     {
                         foreach (var segment in mediaPart.MediaSegments)
                         {
@@ -621,20 +634,20 @@ internal class HLSExtractor : IExtractor
             }
             else if (lists[i].MediaType == MediaType.AUDIO)
             {
-                lists[i].Extension = lists[i].Playlist!.MediaInit != null ? "m4s" : "ts";
+                lists[i].Extension = streamPlaylist.MediaInit != null ? "m4s" : "ts";
                 
                 // 音频流不解密，清除加密信息
-                if (lists[i].Playlist != null && ParserConfig.SkipAudioDecrypt)
+                if (ParserConfig.SkipAudioDecrypt)
                 {
                     // 清除MediaInit的加密信息
-                    if (lists[i].Playlist.MediaInit != null)
+                    if (streamPlaylist.MediaInit != null)
                     {
-                        lists[i].Playlist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
-                        lists[i].Playlist.MediaInit.EncryptInfo.Key = null;
-                        lists[i].Playlist.MediaInit.EncryptInfo.IV = null;
+                        streamPlaylist.MediaInit.EncryptInfo.Method = Common.Enum.EncryptMethod.NONE;
+                        streamPlaylist.MediaInit.EncryptInfo.Key = null;
+                        streamPlaylist.MediaInit.EncryptInfo.IV = null;
                     }
                     // 清除所有MediaParts中MediaSegments的加密信息
-                    foreach (var mediaPart in lists[i].Playlist.MediaParts)
+                    foreach (var mediaPart in streamPlaylist.MediaParts)
                     {
                         foreach (var segment in mediaPart.MediaSegments)
                         {
@@ -647,7 +660,7 @@ internal class HLSExtractor : IExtractor
             }
             else
             {
-                lists[i].Extension = lists[i].Playlist!.MediaInit != null ? "m4s" : "ts";
+                lists[i].Extension = streamPlaylist.MediaInit != null ? "m4s" : "ts";
             }
         }
     }

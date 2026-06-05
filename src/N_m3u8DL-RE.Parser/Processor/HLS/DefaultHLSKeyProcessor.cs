@@ -20,7 +20,7 @@ public class DefaultHLSKeyProcessor : KeyProcessor
         var method = ParserUtil.GetAttribute(keyLine, "METHOD");
         var uri = ParserUtil.GetAttribute(keyLine, "URI");
 
-        Logger.Debug("METHOD:{},URI:{},IV:{}", method, uri, iv);
+        Logger.Debug("METHOD:{},URI:{},IV:{}", method ?? "", uri ?? "", iv ?? "");
 
         var encryptInfo = new EncryptInfo(method);
 
@@ -87,7 +87,7 @@ public class DefaultHLSKeyProcessor : KeyProcessor
         
         // 处理自定义加密方式
         encryptInfo.Method = parserConfig.CustomMethod.Value;
-        Logger.Warn("METHOD changed from {} to {}", method, encryptInfo.Method);
+        Logger.Warn("METHOD changed from {} to {}", method ?? "", encryptInfo.Method);
 
         return encryptInfo;
     }

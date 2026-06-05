@@ -376,7 +376,7 @@ internal static partial class CommandInvoker
         {
             path = Path.GetFullPath(input);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             result.AddError("Invalid log path!");
             return null;
@@ -647,8 +647,7 @@ internal static partial class CommandInvoker
             SkipSubtitleDecrypt = result.GetValue(SkipSubtitleDecrypt),
             SkipAudioDecrypt = result.GetValue(SkipAudioDecrypt),
             ForceMuxDolby = result.GetValue(ForceMuxDolby),
-            UseShakaPackager = result.GetValue(UseShakaPackager),
-            DecryptionEngine = result.GetValue(DecryptionEngine),
+            DecryptionEngine = result.GetValue(UseShakaPackager) ? DecryptEngine.SHAKA_PACKAGER : result.GetValue(DecryptionEngine),
             DecryptionBinaryPath = result.GetValue(DecryptionBinaryPath),
             FFmpegBinaryPath = result.GetValue(FFmpegBinaryPath),
             KeyTextFile = result.GetValue(KeyTextFile),

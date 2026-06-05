@@ -209,6 +209,11 @@ public partial class MSSMoovProcessor
 
     private byte[] GenSinf(string codec)
     {
+        if (string.IsNullOrEmpty(ProtecitonKID))
+        {
+            throw new InvalidDataException("Missing MSS protection KID.");
+        }
+
         var frmaBox = Box("frma", Encoding.ASCII.GetBytes(codec));
 
         var sinfPayload = new List<byte>();

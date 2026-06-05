@@ -12,11 +12,13 @@ namespace N_m3u8DL_RE.Parser;
 
 public class StreamExtractor
 {
-    public ExtractorType ExtractorType => extractor.ExtractorType;
-    private IExtractor extractor;
+    public ExtractorType ExtractorType => Extractor.ExtractorType;
+    private IExtractor? extractor;
     private ParserConfig parserConfig = new();
-    private string rawText;
+    private string rawText = string.Empty;
     private static SemaphoreSlim semaphore = new(1, 1);
+
+    private IExtractor Extractor => extractor ?? throw new InvalidOperationException(ResString.loadUrlFailed);
 
     public Dictionary<string, string> RawFiles { get; set; } = new(); // 存储（文件名,文件内容）
 
@@ -28,13 +30,13 @@ public class StreamExtractor
     public async Task LoadSourceFromUrlAsync(string url)
     {
         Logger.Info(ResString.loadingUrl + url);
-        if (url.StartsWith("file:"))
+        if (url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
         {
             var uri = new Uri(url);
             this.rawText = await File.ReadAllTextAsync(uri.LocalPath);
             parserConfig.OriginalUrl = parserConfig.Url = url;
         }
-        else if (url.StartsWith("http"))
+        else if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
             parserConfig.OriginalUrl = url;
             (this.rawText, url) = await HTTPUtil.GetWebSourceAndNewUrlAsync(url, parserConfig.Headers);
@@ -45,6 +47,10 @@ public class StreamExtractor
             url = Path.GetFullPath(url);
             this.rawText = await File.ReadAllTextAsync(url);
             parserConfig.OriginalUrl = parserConfig.Url = new Uri(url).AbsoluteUri;
+        }
+        else
+        {
+            throw new FileNotFoundException($"{ResString.loadUrlFailed}: {url}", url);
         }
 
         if (string.IsNullOrWhiteSpace(rawText))
@@ -109,7 +115,7 @@ public class StreamExtractor
         {
             await semaphore.WaitAsync();
             Logger.Info(ResString.parsingStream);
-            return await extractor.ExtractStreamsAsync(rawText);
+            return await Extractor.ExtractStreamsAsync(rawText);
         }
         finally
         {
@@ -127,7 +133,7 @@ public class StreamExtractor
         {
             await semaphore.WaitAsync();
             Logger.Info(ResString.parsingStream);
-            await extractor.FetchPlayListAsync(streamSpecs);
+            await Extractor.FetchPlayListAsync(streamSpecs);
         }
         finally
         {
@@ -142,7 +148,7 @@ public class StreamExtractor
             await semaphore.WaitAsync();
             await RetryUtil.WebRequestRetryAsync(async () =>
             {
-                await extractor.RefreshPlayListAsync(streamSpecs);
+                await Extractor.RefreshPlayListAsync(streamSpecs);
                 return true;
             }, retryDelayMilliseconds: 1000, maxRetries: 5);
         }

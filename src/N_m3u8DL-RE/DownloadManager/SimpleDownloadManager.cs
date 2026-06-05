@@ -25,6 +25,8 @@ internal class SimpleDownloadManager
     StreamExtractor StreamExtractor;
     List<StreamSpec> SelectedSteams;
     List<OutputFile> OutputFiles = [];
+    private static readonly object OutputPathLock = new();
+    private static readonly HashSet<string> ReservedOutputPaths = new(StringComparer.OrdinalIgnoreCase);
 
     public SimpleDownloadManager(DownloaderConfig downloaderConfig, List<StreamSpec> selectedSteams, StreamExtractor streamExtractor) 
     { 
@@ -83,7 +85,23 @@ internal class SimpleDownloadManager
         return streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.AES_128_YK)) == true;
     }
 
-    private byte[]? GetAes128YkKeyBytes()
+    private bool ShouldUseBBTS(StreamSpec streamSpec)
+    {
+        if (streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.BBTS)) == true)
+        {
+            return true;
+        }
+
+        var firstSegment = streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault();
+        if (firstSegment?.Url != null && firstSegment.Url.EndsWith(".bbts", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return DownloaderConfig.MyOptions.CustomHLSMethod == Common.Enum.EncryptMethod.BBTS;
+    }
+
+    private byte[]? GetCustomHlsKeyBytes()
     {
         if (DownloaderConfig.MyOptions.CustomHLSKey != null)
         {
@@ -147,6 +165,67 @@ internal class SimpleDownloadManager
         }
     }
 
+    private void DecryptBbtsSegment(DownloadResult result, byte[] keyBytes)
+    {
+        var enc = result.ActualFilePath;
+        var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
+
+        if (Path.GetFileNameWithoutExtension(enc).EndsWith("_dec", StringComparison.OrdinalIgnoreCase))
+        {
+            result.ActualContentLength = new FileInfo(enc).Length;
+            return;
+        }
+
+        if (File.Exists(dec))
+        {
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+            return;
+        }
+
+        try
+        {
+            Crypto.BBTSDecryptionUtil.DecryptFile(enc, dec, keyBytes);
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+        }
+        catch
+        {
+            if (File.Exists(dec)) File.Delete(dec);
+            throw;
+        }
+
+        try
+        {
+            File.Delete(enc);
+        }
+        catch (Exception ex)
+        {
+            Logger.DebugMarkUp($"[grey]Failed to delete encrypted BBTS segment {Path.GetFileName(enc).EscapeMarkup()}: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
+    private static string AppendCopySuffix(string path)
+    {
+        var dir = Path.GetDirectoryName(path) ?? "";
+        return Path.Combine(dir, $"{Path.GetFileNameWithoutExtension(path)}.copy{Path.GetExtension(path)}");
+    }
+
+    private static string ReserveOutputPath(string output, StreamSpec streamSpec)
+    {
+        lock (OutputPathLock)
+        {
+            var candidate = OtherUtil.HandleFileCollision(output, streamSpec);
+            while (ReservedOutputPaths.Contains(Path.GetFullPath(candidate)) || File.Exists(candidate))
+            {
+                candidate = AppendCopySuffix(candidate);
+            }
+
+            ReservedOutputPaths.Add(Path.GetFullPath(candidate));
+            return candidate;
+        }
+    }
+
     private async Task<bool> DownloadStreamAsync(StreamSpec streamSpec, ProgressTask task, SpeedContainer speedContainer)
     {
         speedContainer.ResetVars();
@@ -199,11 +278,14 @@ internal class SimpleDownloadManager
         var currentKID = "";
         var readInfo = false; // 是否读取过
         var mp4Info = new ParsedMP4Info();
+        var useBBTS = ShouldUseBBTS(streamSpec);
+        var bbtsSegmentDecrypt = useBBTS && playlist.MediaInit == null && !splitSingleFile;
+        var bbtsKeyBytes = bbtsSegmentDecrypt ? GetCustomHlsKeyBytes() : null;
         var useAes128Yk = ShouldUseAes128Yk(streamSpec);
         var aes128YkFmp4 = useAes128Yk && playlist.MediaInit != null;
         var aes128YkTs = useAes128Yk && playlist.MediaInit == null;
         var aes128YkSegmentDecrypt = aes128YkTs && !splitSingleFile;
-        var aes128YkKeyBytes = aes128YkSegmentDecrypt ? GetAes128YkKeyBytes() : null;
+        var aes128YkKeyBytes = aes128YkSegmentDecrypt ? GetCustomHlsKeyBytes() : null;
 
         // 用户自定义范围导致被跳过的时长 计算字幕偏移使用
         var skippedDur = streamSpec.SkippedDuration ?? 0d;
@@ -287,6 +369,19 @@ internal class SimpleDownloadManager
             }
         }
 
+        if (useBBTS && splitSingleFile)
+        {
+            Logger.WarnMarkUp("[yellow]BBTS single-file range split detected. Segment decryption is disabled; decrypt after merge.[/]");
+        }
+        else if (bbtsSegmentDecrypt && bbtsKeyBytes != null)
+        {
+            Logger.InfoMarkUp("[grey]BBTS segment decryption enabled.[/]");
+        }
+        else if (bbtsSegmentDecrypt)
+        {
+            Logger.WarnMarkUp("[yellow]No BBTS key provided! Segment decryption disabled.[/]");
+        }
+
         if (aes128YkFmp4)
         {
             Logger.WarnMarkUp("[yellow]AES_128_YK fMP4/CMAF uses MP4 sample encryption. DeYK TS decryption is not applied; use --key KID:KEY with a valid CENC/CBCS content key if available.[/]");
@@ -324,7 +419,11 @@ internal class SimpleDownloadManager
             task.Increment(1);
             if (result is { Success: true })
             {
-                if (aes128YkSegmentDecrypt && aes128YkKeyBytes != null)
+                if (bbtsSegmentDecrypt && bbtsKeyBytes != null)
+                {
+                    DecryptBbtsSegment(result, bbtsKeyBytes);
+                }
+                else if (aes128YkSegmentDecrypt && aes128YkKeyBytes != null)
                 {
                     DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
                 }
@@ -397,7 +496,11 @@ internal class SimpleDownloadManager
             if (result is { Success: true })
                 task.Increment(1);
 
-            if (aes128YkSegmentDecrypt && result is { Success: true } && aes128YkKeyBytes != null)
+            if (bbtsSegmentDecrypt && result is { Success: true } && bbtsKeyBytes != null)
+            {
+                DecryptBbtsSegment(result, bbtsKeyBytes);
+            }
+            else if (aes128YkSegmentDecrypt && result is { Success: true } && aes128YkKeyBytes != null)
             {
                 DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
             }
@@ -430,7 +533,7 @@ internal class SimpleDownloadManager
         var output = Path.Combine(saveDir, saveName + outputExt);
 
         // 检测目标文件是否存在，使用智能重命名
-        var finalOutput = OtherUtil.HandleFileCollision(output, streamSpec);
+        var finalOutput = ReserveOutputPath(output, streamSpec);
         if (finalOutput != output)
         {
             Logger.WarnMarkUp($"{Path.GetFileName(output)} => {Path.GetFileName(finalOutput)}");
@@ -658,7 +761,18 @@ internal class SimpleDownloadManager
             {
                 Logger.InfoMarkUp(ResString.binaryMerge);
                 var files = FileDic.OrderBy(s => s.Key.Index).Select(s => s.Value).Select(v => v!.ActualFilePath).ToArray();
-                MergeUtil.CombineMultipleFilesIntoSingleFile(files, output);
+                try
+                {
+                    MergeUtil.CombineMultipleFilesIntoSingleFile(files, output);
+                }
+                catch (IOException ex)
+                {
+                    var retryOutput = ReserveOutputPath(AppendCopySuffix(output), streamSpec);
+                    Logger.WarnMarkUp($"[yellow]{Path.GetFileName(output).EscapeMarkup()} is not writable: {ex.Message.EscapeMarkup()}[/]");
+                    Logger.WarnMarkUp($"{Path.GetFileName(output)} => {Path.GetFileName(retryOutput)}");
+                    output = retryOutput;
+                    MergeUtil.CombineMultipleFilesIntoSingleFile(files, output);
+                }
                 mergeSuccess = true;
             }
             else
@@ -733,24 +847,9 @@ internal class SimpleDownloadManager
                     isBBTS = true;
                 }
 
-                if (isBBTS)
+                if (isBBTS && !(bbtsSegmentDecrypt && bbtsKeyBytes != null))
                 {
-                    byte[]? keyBytes = null;
-                    
-                    // 优先使用 CustomHLSKey，因为 --custom-hls-key 已经是字节数组
-                    if (DownloaderConfig.MyOptions.CustomHLSKey != null)
-                    {
-                        keyBytes = DownloaderConfig.MyOptions.CustomHLSKey;
-                    }
-                    // 如果没有 CustomHLSKey，再尝试 Keys
-                    else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
-                    {
-                        var keyHex = DownloaderConfig.MyOptions.Keys.First();
-                        if (keyHex != null && HexUtil.TryParseHexString(keyHex, out var bytes))
-                        {
-                            keyBytes = bytes;
-                        }
-                    }
+                    byte[]? keyBytes = GetCustomHlsKeyBytes();
 
                     if (keyBytes != null)
                     {
@@ -801,7 +900,7 @@ internal class SimpleDownloadManager
 
                 if (isAes128Yk)
                 {
-                    byte[]? keyBytes = GetAes128YkKeyBytes();
+                    byte[]? keyBytes = GetCustomHlsKeyBytes();
 
                     if (keyBytes != null)
                     {

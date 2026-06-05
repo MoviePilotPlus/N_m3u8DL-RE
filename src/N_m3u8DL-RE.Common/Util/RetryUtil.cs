@@ -19,7 +19,7 @@ public static class RetryUtil
                 result = await funcAsync();
                 break;
             }
-            catch (Exception ex) when (ex is WebException or IOException or HttpRequestException)
+            catch (Exception ex) when (ex is not FileNotFoundException && ex is WebException or IOException or HttpRequestException)
             {
                 currentException = ex;
                 retryCount++;
