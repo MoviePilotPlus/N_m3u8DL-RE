@@ -85,8 +85,8 @@ Options:
   -M, --mux-after-done <OPTIONS>                          When all works is done, try to mux the downloaded streams.
                                                           Use "--morehelp mux-after-done" for more details
   --custom-hls-method <METHOD>                            Set HLS encryption method
-                                                          (AES_128|AES_128_ECB|CENC|CHACHA20|NONE|SAMPLE_AES|SAMPLE_AES_
-                                                          CTR|UNKNOWN)
+                                                          (AES_128|AES_128_ECB|AES_128_YK|CENC|CHACHA20|NONE|SAMPLE_AES|
+                                                          SAMPLE_AES_CTR|UNKNOWN)
   --custom-hls-key <FILE|HEX|BASE64>                      Set the HLS decryption key. Can be file, HEX or Base64
   --custom-hls-iv <FILE|HEX|BASE64>                       Set the HLS decryption iv. Can be file, HEX or Base64
   --use-system-proxy                                      Use system default proxy [default: True]

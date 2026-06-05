@@ -78,6 +78,75 @@ internal class SimpleDownloadManager
         }
     }
 
+    private bool ShouldUseAes128Yk(StreamSpec streamSpec)
+    {
+        return streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.AES_128_YK)) == true;
+    }
+
+    private byte[]? GetAes128YkKeyBytes()
+    {
+        if (DownloaderConfig.MyOptions.CustomHLSKey != null)
+        {
+            return DownloaderConfig.MyOptions.CustomHLSKey;
+        }
+
+        if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
+        {
+            var keyHex = DownloaderConfig.MyOptions.Keys.First();
+            if (keyHex != null && HexUtil.TryParseHexString(keyHex, out var bytes))
+            {
+                return bytes;
+            }
+        }
+
+        return null;
+    }
+
+    private void DecryptAes128YkTsSegment(DownloadResult result, byte[] keyBytes)
+    {
+        var enc = result.ActualFilePath;
+        var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
+
+        if (Path.GetFileNameWithoutExtension(enc).EndsWith("_dec", StringComparison.OrdinalIgnoreCase))
+        {
+            result.ActualContentLength = new FileInfo(enc).Length;
+            return;
+        }
+
+        if (File.Exists(dec))
+        {
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+            return;
+        }
+
+        if (!Crypto.DeYKDecryptionUtil.IsLikelyTsFile(enc))
+        {
+            throw new InvalidDataException($"AES_128_YK segment is not MPEG-TS: {Path.GetFileName(enc)}");
+        }
+
+        try
+        {
+            Crypto.DeYKDecryptionUtil.DecryptFile(enc, dec, keyBytes);
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+        }
+        catch
+        {
+            if (File.Exists(dec)) File.Delete(dec);
+            throw;
+        }
+
+        try
+        {
+            File.Delete(enc);
+        }
+        catch (Exception ex)
+        {
+            Logger.DebugMarkUp($"[grey]Failed to delete encrypted AES_128_YK segment {Path.GetFileName(enc).EscapeMarkup()}: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
     private async Task<bool> DownloadStreamAsync(StreamSpec streamSpec, ProgressTask task, SpeedContainer speedContainer)
     {
         speedContainer.ResetVars();
@@ -87,6 +156,8 @@ internal class SimpleDownloadManager
 
         var segments = streamSpec.Playlist?.MediaParts.SelectMany(m => m.MediaSegments);
         if (segments == null || !segments.Any()) return false;
+        var playlist = streamSpec.Playlist!;
+        var splitSingleFile = false;
         // 单分段尝试切片并行下载
         if (segments.Count() == 1)
         {
@@ -94,6 +165,7 @@ internal class SimpleDownloadManager
             if (splitSegments != null)
             {
                 segments = splitSegments;
+                splitSingleFile = true;
                 Logger.WarnMarkUp($"[darkorange3_1]{ResString.singleFileSplitWarn}[/]");
                 if (DownloaderConfig.MyOptions.MP4RealTimeDecryption)
                 {
@@ -127,6 +199,11 @@ internal class SimpleDownloadManager
         var currentKID = "";
         var readInfo = false; // 是否读取过
         var mp4Info = new ParsedMP4Info();
+        var useAes128Yk = ShouldUseAes128Yk(streamSpec);
+        var aes128YkFmp4 = useAes128Yk && playlist.MediaInit != null;
+        var aes128YkTs = useAes128Yk && playlist.MediaInit == null;
+        var aes128YkSegmentDecrypt = aes128YkTs && !splitSingleFile;
+        var aes128YkKeyBytes = aes128YkSegmentDecrypt ? GetAes128YkKeyBytes() : null;
 
         // 用户自定义范围导致被跳过的时长 计算字幕偏移使用
         var skippedDur = streamSpec.SkippedDuration ?? 0d;
@@ -210,6 +287,23 @@ internal class SimpleDownloadManager
             }
         }
 
+        if (aes128YkFmp4)
+        {
+            Logger.WarnMarkUp("[yellow]AES_128_YK fMP4/CMAF uses MP4 sample encryption. DeYK TS decryption is not applied; use --key KID:KEY with a valid CENC/CBCS content key if available.[/]");
+        }
+        else if (aes128YkTs && splitSingleFile)
+        {
+            Logger.WarnMarkUp("[yellow]AES_128_YK single-file range split detected. Segment decryption is disabled; decrypt after merge.[/]");
+        }
+        else if (aes128YkSegmentDecrypt && aes128YkKeyBytes != null)
+        {
+            Logger.InfoMarkUp("[grey]AES_128_YK segment decryption enabled.[/]");
+        }
+        else if (aes128YkSegmentDecrypt)
+        {
+            Logger.WarnMarkUp("[yellow]No AES_128_YK key provided! Segment decryption disabled.[/]");
+        }
+
         // 计算填零个数
         var pad = "0".PadLeft(segments.Count().ToString().Length, '0');
 
@@ -230,6 +324,11 @@ internal class SimpleDownloadManager
             task.Increment(1);
             if (result is { Success: true })
             {
+                if (aes128YkSegmentDecrypt && aes128YkKeyBytes != null)
+                {
+                    DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
+                }
+
                 // 修复MSS init
                 if (StreamExtractor.ExtractorType == ExtractorType.MSS)
                 {
@@ -297,8 +396,14 @@ internal class SimpleDownloadManager
             FileDic[seg] = result;
             if (result is { Success: true })
                 task.Increment(1);
+
+            if (aes128YkSegmentDecrypt && result is { Success: true } && aes128YkKeyBytes != null)
+            {
+                DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
+            }
+
             // 实时解密
-            if (seg.IsEncrypted && DownloaderConfig.MyOptions.MP4RealTimeDecryption && result is { Success: true } && !string.IsNullOrEmpty(currentKID)) 
+            if (seg.IsEncrypted && DownloaderConfig.MyOptions.MP4RealTimeDecryption && result is { Success: true } && !string.IsNullOrEmpty(currentKID))
             {
                 var enc = result.ActualFilePath;
                 var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
@@ -676,7 +781,7 @@ internal class SimpleDownloadManager
 
                 // 检测并解密 AES_128_YK
                 bool isAes128Yk = false;
-                if (!isBBTS)
+                if (!isBBTS && !aes128YkFmp4 && !(aes128YkSegmentDecrypt && aes128YkKeyBytes != null))
                 {
                     // 检测加密方式是否为 AES_128_YK
                     foreach (var part in streamSpec.Playlist?.MediaParts ?? [])
@@ -692,51 +797,39 @@ internal class SimpleDownloadManager
                         if (isAes128Yk) break;
                     }
 
-                    // 检测用户是否显式指定了 --custom-hls-method AES_128_YK
-                    if (!isAes128Yk && DownloaderConfig.MyOptions.CustomHLSMethod == Common.Enum.EncryptMethod.AES_128_YK)
-                    {
-                        isAes128Yk = true;
-                    }
                 }
 
                 if (isAes128Yk)
                 {
-                    byte[]? keyBytes = null;
-
-                    // 优先使用 CustomHLSKey
-                    if (DownloaderConfig.MyOptions.CustomHLSKey != null)
-                    {
-                        keyBytes = DownloaderConfig.MyOptions.CustomHLSKey;
-                    }
-                    // 如果没有 CustomHLSKey，再尝试 Keys
-                    else if (DownloaderConfig.MyOptions.Keys is { Length: > 0 })
-                    {
-                        var keyHex = DownloaderConfig.MyOptions.Keys.First();
-                        if (keyHex != null && HexUtil.TryParseHexString(keyHex, out var bytes))
-                        {
-                            keyBytes = bytes;
-                        }
-                    }
+                    byte[]? keyBytes = GetAes128YkKeyBytes();
 
                     if (keyBytes != null)
                     {
                         var enc = output;
                         var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
-                        Logger.InfoMarkUp("[grey]Decrypting AES_128_YK...[/]");
 
-                        try
+                        if (!Crypto.DeYKDecryptionUtil.IsLikelyTsFile(enc))
                         {
-                            Crypto.DeYKDecryptionUtil.DecryptFile(enc, dec, keyBytes);
-
-                            if (File.Exists(dec))
-                            {
-                                File.Delete(enc);
-                                File.Move(dec, enc);
-                            }
+                            Logger.WarnMarkUp($"[yellow]AES_128_YK only supports MPEG-TS output. Skip DeYK for {Path.GetFileName(enc).EscapeMarkup()}.[/]");
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            Logger.ErrorMarkUp($"[red]AES_128_YK decryption failed: {ex.Message}[/]");
+                            Logger.InfoMarkUp("[grey]Decrypting AES_128_YK...[/]");
+
+                            try
+                            {
+                                Crypto.DeYKDecryptionUtil.DecryptFile(enc, dec, keyBytes);
+
+                                if (File.Exists(dec))
+                                {
+                                    File.Delete(enc);
+                                    File.Move(dec, enc);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.ErrorMarkUp($"[red]AES_128_YK decryption failed: {ex.Message}[/]");
+                            }
                         }
                     }
                     else
@@ -759,7 +852,7 @@ internal class SimpleDownloadManager
         }
 
         // 重新读取init信息
-        if (mergeSuccess && totalCount >= 1 && string.IsNullOrEmpty(currentKID) && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.NONE && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS)
+        if (mergeSuccess && totalCount >= 1 && string.IsNullOrEmpty(currentKID) && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.NONE && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS && (streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.AES_128_YK || aes128YkFmp4))
         {
             currentKID = MP4DecryptUtil.GetMP4Info(output).KID;
             // try shaka packager, which can handle WebM
@@ -771,7 +864,7 @@ internal class SimpleDownloadManager
         }
 
         // 调用mp4decrypt解密
-        if (mergeSuccess && File.Exists(output) && !string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions is { MP4RealTimeDecryption: false, Keys.Length: > 0 } && streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault()?.EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS)
+        if (mergeSuccess && File.Exists(output) && !string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions is { MP4RealTimeDecryption: false, Keys.Length: > 0 } && streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault()?.EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS && (streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault()?.EncryptInfo.Method != Common.Enum.EncryptMethod.AES_128_YK || aes128YkFmp4))
         {
             var enc = output;
             var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
