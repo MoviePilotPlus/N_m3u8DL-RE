@@ -264,9 +264,9 @@ internal static class StaticText
         ),
         ["cmd_keys"] = new TextContainer
         (
-            zhCN: "设置解密密钥, 程序调用mp4decrpyt/shaka-packager/ffmpeg进行解密. 格式:\r\n--key KID1:KEY1 --key KID2:KEY2\r\n对于KEY相同的情况可以直接输入 --key KEY",
-            zhTW: "設置解密密鑰, 程序調用mp4decrpyt/shaka-packager/ffmpeg進行解密. 格式:\r\n--key KID1:KEY1 --key KID2:KEY2\r\n對於KEY相同的情況可以直接輸入 --key KEY",
-            enUS: "Set decryption key(s) to mp4decrypt/shaka-packager/ffmpeg. format:\r\n--key KID1:KEY1 --key KID2:KEY2\r\nor use --key KEY if all tracks share the same key."
+            zhCN: "设置解密密钥, 程序调用mp4decrpyt/shaka-packager/ffmpeg或内部CMAF引擎进行解密. 格式:\r\n--key KID1:KEY1 --key KID2:KEY2\r\n对于KEY相同的情况可以直接输入 --key KEY，程序会自动使用已识别的KID",
+            zhTW: "設置解密密鑰, 程序調用mp4decrpyt/shaka-packager/ffmpeg或內部CMAF引擎進行解密. 格式:\r\n--key KID1:KEY1 --key KID2:KEY2\r\n對於KEY相同的情況可以直接輸入 --key KEY，程序會自動使用已識別的KID",
+            enUS: "Set decryption key(s) to mp4decrypt/shaka-packager/ffmpeg or the internal CMAF engine. format:\r\n--key KID1:KEY1 --key KID2:KEY2\r\nor use --key KEY if all tracks share the same key; the detected KID will be used automatically."
         ),
         ["cmd_keyText"] = new TextContainer
         (
@@ -486,9 +486,9 @@ internal static class StaticText
         ),
         ["cmd_decryptionEngine"] = new TextContainer
         (
-            zhCN: "设置解密引擎 (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
-            zhTW: "設置解密引擎 (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
-            enUS: "Set the decryption engine (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)"
+            zhCN: "设置解密引擎 (AUTO|MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
+            zhTW: "設置解密引擎 (AUTO|MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
+            enUS: "Set the decryption engine (AUTO|MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)"
         ),
         ["cmd_concurrentDownload"] = new TextContainer
         (

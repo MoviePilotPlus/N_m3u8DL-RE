@@ -75,10 +75,10 @@ Options:
   --urlprocessor-args <urlprocessor-args>                 此字符串将直接传递给URL Processor
   --key <key>                                             设置解密密钥, 程序调用mp4decrpyt/shaka-packager/ffmpeg或内部CMAF引擎进行解密. 格式:
                                                           --key KID1:KEY1 --key KID2:KEY2
-                                                          对于KEY相同的情况可以直接输入 --key KEY
+                                                          对于KEY相同的情况可以直接输入 --key KEY，程序会自动使用已识别的KID
   --key-text-file <key-text-file>                         设置密钥文件,程序将从文件中按KID搜寻KEY以解密.(不建议使用特大文件)
-  --decryption-engine <CMAF|FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>
-                                                          设置解密引擎 [default: MP4DECRYPT]
+  --decryption-engine <AUTO|CMAF|FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>
+                                                          设置解密引擎 [default: AUTO]
   --decryption-binary-path <PATH>                         MP4解密所用工具的全路径, 例如 C:\Tools\mp4decrypt.exe
   --mp4-real-time-decryption                              实时解密MP4分片 [default: False]
   -R, --max-speed <SPEED>                                 设置限速，单位支持 Mbps 或 Kbps，如：15M 100K

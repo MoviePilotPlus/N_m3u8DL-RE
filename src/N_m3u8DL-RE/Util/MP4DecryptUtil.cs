@@ -2,6 +2,7 @@
 using N_m3u8DL_RE.Crypto;
 using N_m3u8DL_RE.Common.Log;
 using N_m3u8DL_RE.Common.Resource;
+using N_m3u8DL_RE.Common.Util;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using N_m3u8DL_RE.Enum;
@@ -11,6 +12,44 @@ namespace N_m3u8DL_RE.Util;
 internal static partial class MP4DecryptUtil
 {
     private static readonly string ZeroKid = "00000000000000000000000000000000";
+
+    public static DecryptEngine SelectDecryptionEngine(DecryptEngine decryptEngine, ParsedMP4Info mp4Info)
+    {
+        if (decryptEngine != DecryptEngine.AUTO)
+            return decryptEngine;
+
+        return IsSupportedCmafScheme(mp4Info.Scheme) ? DecryptEngine.CMAF : DecryptEngine.MP4DECRYPT;
+    }
+
+    public static string ResolveDecryptionBinaryPath(DecryptEngine decryptEngine, string? bin, string? ffmpegBin)
+    {
+        if (!string.IsNullOrEmpty(bin))
+        {
+            if (!File.Exists(bin))
+                throw new FileNotFoundException(bin);
+            return bin;
+        }
+
+        return decryptEngine switch
+        {
+            DecryptEngine.CMAF => "",
+            DecryptEngine.FFMPEG => ffmpegBin ?? throw new FileNotFoundException(ResString.ffmpegNotFound),
+            DecryptEngine.SHAKA_PACKAGER => FindShakaPackager() ?? throw new FileNotFoundException(ResString.shakaPackagerNotFound),
+            DecryptEngine.MP4DECRYPT => GlobalUtil.FindExecutable("mp4decrypt") ?? throw new FileNotFoundException(ResString.mp4decryptNotFound),
+            _ => throw new ArgumentOutOfRangeException(nameof(decryptEngine), decryptEngine, null)
+        };
+    }
+
+    private static bool IsSupportedCmafScheme(string? scheme) => scheme is "cbcs" or "cbc1";
+
+    private static string? FindShakaPackager()
+    {
+        return GlobalUtil.FindExecutable("shaka-packager")
+               ?? GlobalUtil.FindExecutable("packager-linux-x64")
+               ?? GlobalUtil.FindExecutable("packager-osx-x64")
+               ?? GlobalUtil.FindExecutable("packager-win-x64");
+    }
+
     public static async Task<bool> DecryptAsync(DecryptEngine decryptEngine, string bin, string[]? keys, string source, string dest, string? kid, string init = "", bool isMultiDRM=false)
     {
         if (keys == null || keys.Length == 0) return false;
@@ -29,8 +68,14 @@ internal static partial class MP4DecryptUtil
 
         if (!string.IsNullOrEmpty(kid))
         {
-            var test = keyPairs.Where(k => k.StartsWith(kid)).ToList();
-            if (test.Count != 0) keyPair = test.First();
+            keyPair = keyPairs.FirstOrDefault(k =>
+            {
+                var separatorIndex = k.IndexOf(':');
+                if (separatorIndex <= 0)
+                    return false;
+
+                return string.Equals(k[..separatorIndex], kid, StringComparison.OrdinalIgnoreCase);
+            });
         }
 
         // Apple
@@ -40,14 +85,25 @@ internal static partial class MP4DecryptUtil
             trackId = "1";
         }
 
-        // user only input key, append kid
-        if (keyPair == null && keyPairs.Count == 1 && !keyPairs.First().Contains(':'))
+        // user only input one key, append kid; user input one id:key, use it directly.
+        if (keyPair == null && keyPairs.Count == 1)
         {
-            keyPairs = keyPairs.Select(x => $"{kid}:{x}").ToList();
+            if (!keyPairs.First().Contains(':'))
+                keyPairs = keyPairs.Select(x => $"{kid}:{x}").ToList();
             keyPair = keyPairs.First();
         }
-            
-        if (keyPair == null) return false;
+
+        if (keyPair == null)
+        {
+            Logger.Error($"No key matched KID: {kid}");
+            return false;
+        }
+
+        if (decryptEngine == DecryptEngine.AUTO)
+        {
+            Logger.Error("Decryption engine was not resolved.");
+            return false;
+        }
 
         if (decryptEngine == DecryptEngine.CMAF)
         {
@@ -176,10 +232,14 @@ internal static partial class MP4DecryptUtil
             using var reader = new StreamReader(stream);
             while (await reader.ReadLineAsync() is { } line)
             {
-                if (!line.Trim().StartsWith(kid)) continue;
+                var keyLine = line.Trim();
+                var separatorIndex = keyLine.IndexOf(':');
+                var keyId = separatorIndex < 0 ? keyLine : keyLine[..separatorIndex];
+                if (!string.Equals(keyId, kid, StringComparison.OrdinalIgnoreCase))
+                    continue;
                 
-                Logger.InfoMarkUp($"[green]OK[/] [grey]{line.Trim()}[/]");
-                return line.Trim();
+                Logger.InfoMarkUp($"[green]OK[/] [grey]{keyLine}[/]");
+                return keyLine;
             }
         }
         catch (Exception ex)

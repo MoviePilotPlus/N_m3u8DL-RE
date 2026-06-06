@@ -65,7 +65,7 @@ internal static partial class CommandInvoker
     private static readonly Option<bool> SkipAudioDecrypt = new Option<bool>("--skip-audio-decrypt") { Description = ResString.cmd_skipAudioDecrypt }.WithDefault(true);
     private static readonly Option<bool> ForceMuxDolby = new Option<bool>("--force-mux-dolby") { Description = ResString.cmd_forceMuxDolby }.WithDefault(true);
     private static readonly Option<bool> UseShakaPackager = new Option<bool>("--use-shaka-packager") { Hidden = true, Description = ResString.cmd_useShakaPackager }.WithDefault(false);
-    private static readonly Option<DecryptEngine> DecryptionEngine = new ("--decryption-engine") { Description = ResString.cmd_decryptionEngine, DefaultValueFactory = _ => DecryptEngine.MP4DECRYPT };
+    private static readonly Option<DecryptEngine> DecryptionEngine = new ("--decryption-engine") { Description = ResString.cmd_decryptionEngine, DefaultValueFactory = _ => DecryptEngine.AUTO };
     private static readonly Option<bool> ForceAnsiConsole = new("--force-ansi-console") { Description = ResString.cmd_forceAnsiConsole };
     private static readonly Option<bool> NoAnsiColor = new("--no-ansi-color") { Description = ResString.cmd_noAnsiColor };
     private static readonly Option<string?> DecryptionBinaryPath = new("--decryption-binary-path") { HelpName = "PATH", Description = ResString.cmd_decryptionBinaryPath };

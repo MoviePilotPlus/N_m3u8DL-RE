@@ -73,12 +73,13 @@ Options:
   --key <key>                                             Set decryption key(s) to mp4decrypt/shaka-packager/ffmpeg
                                                           or the internal CMAF engine. format:
                                                           --key KID1:KEY1 --key KID2:KEY2
-                                                          or use --key KEY if all tracks share the same key.
+                                                          or use --key KEY if all tracks share the same key; the
+                                                          detected KID will be used automatically.
   --key-text-file <key-text-file>                         Set the kid-key file, the program will search the KEY with
                                                           KID from the file.(Very large file are not recommended)
-  --decryption-engine <CMAF|FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>
+  --decryption-engine <AUTO|CMAF|FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>
                                                           Set the decryption engine [default:
-                                                          MP4DECRYPT]
+                                                          AUTO]
   --decryption-binary-path <PATH>                         Full path to the tool used for MP4 decryption, like
                                                           C:\Tools\mp4decrypt.exe
   --mp4-real-time-decryption                              Decrypt MP4 segments in real time [default: False]

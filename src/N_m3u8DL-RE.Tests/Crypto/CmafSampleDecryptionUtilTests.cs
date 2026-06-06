@@ -1,12 +1,76 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
+using Mp4SubtitleParser;
 using N_m3u8DL_RE.Crypto;
+using N_m3u8DL_RE.Enum;
+using N_m3u8DL_RE.Util;
 
 namespace N_m3u8DL_RE.Tests.Crypto;
 
 public class CmafSampleDecryptionUtilTests
 {
+    [Fact]
+    public void SelectDecryptionEngine_Auto_UsesInternalCmafForCbcs()
+    {
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv);
+
+        var cbcsInfo = MP4InitUtil.ReadInit(init);
+        Assert.Equal(DecryptEngine.CMAF, MP4DecryptUtil.SelectDecryptionEngine(DecryptEngine.AUTO, cbcsInfo));
+
+        var cencInfo = new ParsedMP4Info { Scheme = "cenc" };
+        Assert.Equal(DecryptEngine.MP4DECRYPT, MP4DecryptUtil.SelectDecryptionEngine(DecryptEngine.AUTO, cencInfo));
+    }
+
+    [Fact]
+    public async Task DecryptAsync_CmafWithSingleKey_DecryptsUsingDetectedKid()
+    {
+        var key = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv);
+
+        var clearPrefix = Encoding.ASCII.GetBytes("hdr");
+        var clearSuffix = Encoding.ASCII.GetBytes("tail");
+        var plain = Enumerable.Repeat((byte)'Z', 16).ToArray();
+        var encrypted = EncryptCbc(key, iv, plain);
+        var sampleData = Concat(clearPrefix, encrypted, clearSuffix);
+        var fragment = BuildFragment(sampleData, clearPrefix.Length, encrypted.Length, clearSuffix.Length);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var initPath = Path.Combine(tempDir, "init.mp4");
+            var sourcePath = Path.Combine(tempDir, "seg.m4s");
+            var destPath = Path.Combine(tempDir, "seg_dec.m4s");
+            await File.WriteAllBytesAsync(initPath, init);
+            await File.WriteAllBytesAsync(sourcePath, fragment);
+
+            var keyHex = Convert.ToHexString(key).ToLowerInvariant();
+            var kidHex = Convert.ToHexString(kid).ToLowerInvariant();
+            var success = await MP4DecryptUtil.DecryptAsync(
+                DecryptEngine.CMAF,
+                "",
+                [keyHex],
+                sourcePath,
+                destPath,
+                kidHex,
+                initPath);
+
+            Assert.True(success);
+            var output = await File.ReadAllBytesAsync(destPath);
+            var mdat = FindBox(output, "mdat");
+            Assert.Equal(Concat(clearPrefix, plain, clearSuffix), output[mdat.contentStart..(mdat.contentStart + sampleData.Length)]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     [Fact]
     public void TryDecryptFragment_CbcsCrypt1Skip9_DecryptsPatternAndPatchesSampleDescriptionIndex()
     {

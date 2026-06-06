@@ -147,6 +147,9 @@ internal class Program
             }
             switch (option.DecryptionEngine)
             {
+                case DecryptEngine.AUTO:
+                    Logger.Extra("decryption engine => auto");
+                    break;
                 case DecryptEngine.SHAKA_PACKAGER:
                 {
                     var file = GlobalUtil.FindExecutable("shaka-packager");
