@@ -570,6 +570,29 @@ internal class SimpleDownloadManager
             return false;
         }
 
+        if (streamSpec.Playlist?.MediaInit != null &&
+            FileDic.TryGetValue(streamSpec.Playlist.MediaInit, out var initDownloadResult) &&
+            initDownloadResult is { ActualFilePath: { Length: > 0 } initActualPath } &&
+            !File.Exists(initActualPath))
+        {
+            if (!string.IsNullOrEmpty(mp4InitFile) && File.Exists(mp4InitFile))
+            {
+                initDownloadResult.ActualFilePath = mp4InitFile;
+            }
+            else
+            {
+                Logger.WarnMarkUp("[yellow]Init file is missing before merge, re-downloading init segment...[/]");
+                var initPath = Path.Combine(tmpDir, "_init.mp4.tmp");
+                var retryInit = await Downloader.DownloadSegmentAsync(streamSpec.Playlist.MediaInit, initPath, speedContainer, headers);
+                if (retryInit is not { Success: true })
+                {
+                    throw new FileNotFoundException("Init file is missing and re-download failed.", initActualPath);
+                }
+                FileDic[streamSpec.Playlist.MediaInit] = retryInit;
+                mp4InitFile = retryInit.ActualFilePath;
+            }
+        }
+
         // 自动修复VTT raw字幕
         if (DownloaderConfig.MyOptions.AutoSubtitleFix && streamSpec is { MediaType: Common.Enum.MediaType.SUBTITLES, Extension: not null } && streamSpec.Extension.Contains("vtt")) 
         {
@@ -765,7 +788,7 @@ internal class SimpleDownloadManager
                 {
                     MergeUtil.CombineMultipleFilesIntoSingleFile(files, output);
                 }
-                catch (IOException ex)
+                catch (IOException ex) when (files.All(File.Exists))
                 {
                     var retryOutput = ReserveOutputPath(AppendCopySuffix(output), streamSpec);
                     Logger.WarnMarkUp($"[yellow]{Path.GetFileName(output).EscapeMarkup()} is not writable: {ex.Message.EscapeMarkup()}[/]");
