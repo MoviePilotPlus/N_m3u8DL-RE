@@ -18,7 +18,7 @@ public class EncryptInfo
     /// 创建EncryptInfo并尝试自动解析Method
     /// </summary>
     /// <param name="method"></param>
-    public EncryptInfo(string method)
+    public EncryptInfo(string? method)
     {
         Method = ParseMethod(method);
     }

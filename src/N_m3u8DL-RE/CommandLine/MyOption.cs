@@ -157,11 +157,6 @@ internal class MyOption
     /// </summary>
     public bool ForceMuxDolby { get; set; }
     /// <summary>
-    /// See: <see cref="CommandInvoker.UseShakaPackager"/>.
-    /// </summary>
-    [Obsolete("Use DecryptionEngine instead")]
-    public bool UseShakaPackager { get; set; }
-    /// <summary>
     /// See: <see cref="CommandInvoker.DecryptionEngine"/>.
     /// </summary>
     public DecryptEngine DecryptionEngine { get; set; }
