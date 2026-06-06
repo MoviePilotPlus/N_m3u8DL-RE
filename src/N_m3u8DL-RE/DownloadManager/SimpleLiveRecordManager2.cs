@@ -205,6 +205,27 @@ internal class SimpleLiveRecordManager2
             }
         }
 
+        bool ShouldDecryptMp4Segment(MediaSegment segment)
+        {
+            return segment.IsEncrypted || (streamSpec.Playlist?.MediaInit != null && !string.IsNullOrEmpty(currentKID));
+        }
+
+        ParsedMP4Info ResolveDecryptEngineForSegment(string enc)
+        {
+            var segmentMp4Info = MP4DecryptUtil.GetMP4Info(enc);
+            if (!string.IsNullOrEmpty(segmentMp4Info.Scheme) || !string.IsNullOrEmpty(segmentMp4Info.KID))
+            {
+                mp4Info = segmentMp4Info;
+                ResolveDecryptEngine(mp4Info);
+            }
+            else if (decryptEngine == DecryptEngine.AUTO)
+            {
+                ResolveDecryptEngine(mp4Info);
+            }
+
+            return segmentMp4Info;
+        }
+
         Logger.Debug($"dirName: {dirName}; tmpDir: {tmpDir}; saveDir: {saveDir}; saveName: {saveName}");
 
         // 创建文件夹
@@ -314,7 +335,7 @@ internal class SimpleLiveRecordManager2
                         var processor = new MSSMoovProcessor(streamSpec);
                         var header = processor.GenHeader(File.ReadAllBytes(result.ActualFilePath));
                         await File.WriteAllBytesAsync(FileDic[streamSpec.Playlist!.MediaInit!]!.ActualFilePath, header);
-                        if (seg.IsEncrypted && DownloaderConfig.MyOptions.MP4RealTimeDecryption && !string.IsNullOrEmpty(currentKID))
+                        if (ShouldDecryptMp4Segment(seg) && DownloaderConfig.MyOptions.MP4RealTimeDecryption && !string.IsNullOrEmpty(currentKID))
                         {
                             // 需要重新解密init
                             var enc = FileDic[streamSpec.Playlist!.MediaInit!]!.ActualFilePath;
@@ -336,13 +357,12 @@ internal class SimpleLiveRecordManager2
                     // 从文件读取KEY
                     await SearchKeyAsync(currentKID);
                     // 实时解密
-                    if (seg.IsEncrypted && DownloaderConfig.MyOptions.MP4RealTimeDecryption && !string.IsNullOrEmpty(currentKID))
+                    if (ShouldDecryptMp4Segment(seg) && DownloaderConfig.MyOptions.MP4RealTimeDecryption && !string.IsNullOrEmpty(currentKID))
                     {
                         var enc = result.ActualFilePath;
                         var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
-                        mp4Info = MP4DecryptUtil.GetMP4Info(enc);
-                        ResolveDecryptEngine(mp4Info);
-                        var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, ResolveDecryptionBinaryPath(), DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile);
+                        var segmentMp4Info = ResolveDecryptEngineForSegment(enc);
+                        var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, ResolveDecryptionBinaryPath(), DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile, isMultiDRM: segmentMp4Info.isMultiDRM);
                         if (dResult)
                         {
                             File.Delete(enc);
@@ -385,13 +405,12 @@ internal class SimpleLiveRecordManager2
                 if (result is { Success: true })
                     task.Increment(1);
                 // 实时解密
-                if (seg.IsEncrypted && DownloaderConfig.MyOptions.MP4RealTimeDecryption && result is { Success: true } && !string.IsNullOrEmpty(currentKID))
+                if (ShouldDecryptMp4Segment(seg) && DownloaderConfig.MyOptions.MP4RealTimeDecryption && result is { Success: true } && !string.IsNullOrEmpty(currentKID))
                 {
                     var enc = result.ActualFilePath;
                     var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
-                    mp4Info = MP4DecryptUtil.GetMP4Info(enc);
-                    ResolveDecryptEngine(mp4Info);
-                    var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, ResolveDecryptionBinaryPath(), DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile);
+                    var segmentMp4Info = ResolveDecryptEngineForSegment(enc);
+                    var dResult = await MP4DecryptUtil.DecryptAsync(decryptEngine, ResolveDecryptionBinaryPath(), DownloaderConfig.MyOptions.Keys, enc, dec, currentKID, mp4InitFile, isMultiDRM: segmentMp4Info.isMultiDRM);
                     if (dResult)
                     {
                         File.Delete(enc);
@@ -949,15 +968,25 @@ internal class SimpleLiveRecordManager2
             var outPath = Path.Combine(saveDir, outName);
             Logger.WarnMarkUp($"Muxing to [grey]{outName.EscapeMarkup()}{ext}[/]");
             var result = false;
-            if (DownloaderConfig.MyOptions.MuxOptions.UseMkvmerge) result = MergeUtil.MuxInputsByMkvmerge(DownloaderConfig.MyOptions.MkvmergeBinaryPath!, OutputFiles.ToArray(), outPath);
-            else result = MergeUtil.MuxInputsByFFmpeg(DownloaderConfig.MyOptions.FFmpegBinaryPath!, OutputFiles.ToArray(), outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo, DownloaderConfig.MyOptions.CopyrightInfo ?? "", DownloaderConfig.MyOptions.CommnetInfo ?? "");
+            var muxInputs = OutputFiles.ToArray();
+            if (DownloaderConfig.MyOptions.MuxOptions.UseMkvmerge)
+            {
+                result = MergeUtil.MuxInputsByMkvmerge(DownloaderConfig.MyOptions.MkvmergeBinaryPath!, muxInputs, outPath);
+            }
+            else
+            {
+                result = MergeUtil.MuxInputsByFFmpegWithFallback(DownloaderConfig.MyOptions.FFmpegBinaryPath!, muxInputs, outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo, out muxInputs, DownloaderConfig.MyOptions.CopyrightInfo ?? "", DownloaderConfig.MyOptions.CommnetInfo ?? "");
+            }
             // 完成后删除各轨道文件
             if (result)
             {
                 if (!DownloaderConfig.MyOptions.MuxOptions.KeepFiles)
                 {
                     Logger.WarnMarkUp("[grey]Cleaning files...[/]");
-                    OutputFiles.ForEach(f => File.Delete(f.FilePath));
+                    foreach (var input in muxInputs)
+                    {
+                        File.Delete(input.FilePath);
+                    }
                     var tmpDir = DownloaderConfig.MyOptions.TmpDir ?? Environment.CurrentDirectory;
                     OtherUtil.SafeDeleteDir(tmpDir);
                 }

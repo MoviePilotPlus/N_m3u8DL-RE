@@ -147,7 +147,73 @@ public class CmafSampleDecryptionUtilTests
         Assert.Equal(expectedEncryptedSample, merged[secondMdat.contentStart..(secondMdat.contentStart + expectedEncryptedSample.Length)]);
     }
 
-    private static byte[] BuildInit(byte[] kid, byte[] constantIv)
+    [Fact]
+    public void TryDecryptFile_CmafSanitizesFragmentEncryptionBoxes()
+    {
+        var key = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv);
+
+        var clearPrefix = Encoding.ASCII.GetBytes("hdr");
+        var plain = Enumerable.Repeat((byte)'Z', 16).ToArray();
+        var encrypted = EncryptCbc(key, iv, plain);
+        var sampleData = Concat(clearPrefix, encrypted);
+        var fragment = BuildFragment(sampleData, clearPrefix.Length, encrypted.Length, 0);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var initPath = Path.Combine(tempDir, "init.mp4");
+            var sourcePath = Path.Combine(tempDir, "seg.m4s");
+            var destPath = Path.Combine(tempDir, "seg_dec.m4s");
+            File.WriteAllBytes(initPath, init);
+            File.WriteAllBytes(sourcePath, fragment);
+
+            Assert.True(CmafSampleDecryptionUtil.TryDecryptFile(sourcePath, destPath, key, initPath, out var error), error);
+            var output = File.ReadAllBytes(destPath);
+
+            Assert.Equal(0, FindBox(output, "senc").size);
+            Assert.NotEqual(0, FindBox(output, "free").size);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrySanitizeDecryptedInitFile_FreesPsshWithoutChangingSampleEntry()
+    {
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv, includePssh: true);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var initPath = Path.Combine(tempDir, "init.mp4");
+            File.WriteAllBytes(initPath, init);
+
+            Assert.True(CmafSampleDecryptionUtil.TrySanitizeDecryptedInitFile(initPath, out var error), error);
+            var output = File.ReadAllBytes(initPath);
+            var stsd = FindBox(output, "stsd");
+            var firstEntryOffset = stsd.contentStart + 8;
+
+            Assert.Equal("encv", Encoding.ASCII.GetString(output, firstEntryOffset + 4, 4));
+            Assert.Equal(0, FindBox(output, "pssh").size);
+            Assert.NotEqual(0, FindBox(output, "sinf").size);
+            Assert.NotEqual(0, FindBox(output, "free").size);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    private static byte[] BuildInit(byte[] kid, byte[] constantIv, bool includePssh = false)
     {
         var tencPayload = Concat(
             [0x00, 0x19, 0x01, 0x00],
@@ -162,7 +228,14 @@ public class CmafSampleDecryptionUtilTests
         var encv = Box("encv", Concat(new byte[78], sinf));
         var dvhe = Box("dvhe", new byte[78]);
         var stsd = FullBox("stsd", 0, 0, Concat(UInt32(2), encv, dvhe));
-        return Box("moov", Box("trak", Box("mdia", Box("minf", Box("stbl", stsd)))));
+        var trak = Box("trak", Box("mdia", Box("minf", Box("stbl", stsd))));
+        if (!includePssh)
+            return Box("moov", trak);
+
+        var pssh = FullBox("pssh", 0, 0, Concat(
+            [0xED, 0xEF, 0x8B, 0xA9, 0x79, 0xD6, 0x4A, 0xCE, 0xA3, 0xC8, 0x27, 0xDC, 0xD5, 0x1D, 0x21, 0xED],
+            UInt32(0)));
+        return Box("moov", trak, pssh);
     }
 
     private static byte[] BuildFragment(byte[] sampleData, int clearPrefixSize, int protectedSize, int clearSuffixSize)
@@ -231,7 +304,32 @@ public class CmafSampleDecryptionUtilTests
             if (data.AsSpan(offset + 4, 4).SequenceEqual(needle))
                 return (offset, size, offset + 8);
 
-            if (boxType is "moof" or "traf")
+            if (boxType == "stsd")
+            {
+                var count = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(offset + 12, 4));
+                var entryOffset = offset + 16;
+                for (var i = 0; i < count && entryOffset + 8 <= offset + size; i++)
+                {
+                    var entrySize = checked((int)BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(entryOffset, 4)));
+                    if (entrySize < 8 || entryOffset + entrySize > offset + size)
+                        break;
+
+                    var entryType = Encoding.ASCII.GetString(data.AsSpan(entryOffset + 4, 4));
+                    if (entryType == type)
+                        return (entryOffset, entrySize, entryOffset + 8);
+
+                    var childStart = entryType is "mp4a" or "enca" or "ac-3" or "ec-3"
+                        ? Math.Min(entryOffset + 36, entryOffset + entrySize)
+                        : Math.Min(entryOffset + 86, entryOffset + entrySize);
+                    var nested = FindBox(data, type, childStart, entryOffset + entrySize);
+                    if (nested.size > 0)
+                        return nested;
+
+                    entryOffset += entrySize;
+                }
+            }
+
+            if (boxType is "moov" or "trak" or "mdia" or "minf" or "stbl" or "sinf" or "schi" or "moof" or "traf")
             {
                 var nested = FindBox(data, type, offset + 8, offset + size);
                 if (nested.size > 0)

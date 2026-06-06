@@ -251,6 +251,147 @@ internal static class MergeUtil
         return code == 0;
     }
 
+    public static bool FFmpegSupportsEac3(string binary)
+    {
+        try
+        {
+            using var p = new Process();
+            p.StartInfo = new ProcessStartInfo()
+            {
+                FileName = binary,
+                Arguments = "-hide_banner -codecs",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            p.Start();
+            var output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+            p.WaitForExit();
+            return output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Any(line => line.Contains(" eac3 ", StringComparison.OrdinalIgnoreCase) ||
+                             line.Contains(" eac3\t", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            Logger.DebugMarkUp($"[grey]Failed to check ffmpeg eac3 support: {ex.Message.EscapeMarkup()}[/]");
+            return false;
+        }
+    }
+
+    public static bool MuxInputsByFFmpegWithFallback(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, out OutputFile[] muxedInputs, string copyright = "", string comment = "")
+    {
+        var ffmpegSupportsEac3 = FFmpegSupportsEac3(binary);
+        muxedInputs = FilterFfmpegMp4UnsupportedInputs(binary, files, muxFormat, ffmpegSupportsEac3, out var skippedInputs);
+        foreach (var skipped in skippedInputs)
+        {
+            var reason = ffmpegSupportsEac3
+                ? "Current ffmpeg cannot mux this EAC3 audio into MP4"
+                : "Current ffmpeg does not report EAC3 codec support";
+            Logger.WarnMarkUp($"[yellow]{reason}. Keep audio outside MP4 mux: {Path.GetFileName(skipped.FilePath).EscapeMarkup()}[/]");
+        }
+
+        var result = MuxInputsByFFmpeg(binary, muxedInputs, outputPath, muxFormat, dateinfo, copyright, comment);
+        if (result || muxFormat != MuxFormat.MP4 || !ffmpegSupportsEac3)
+            return result;
+
+        var retryInputs = FilterFfmpegMp4UnsupportedInputs(binary, files, muxFormat, ffmpegSupportsEac3: false, out var retrySkippedInputs);
+        if (retrySkippedInputs.Length == 0 || retryInputs.Length == muxedInputs.Length)
+            return false;
+
+        Logger.WarnMarkUp("[yellow]ffmpeg reports EAC3 support, but MP4 mux failed. Retrying without EAC3 audio.[/]");
+        foreach (var skipped in retrySkippedInputs)
+        {
+            Logger.WarnMarkUp($"[yellow]Keep audio outside MP4 mux: {Path.GetFileName(skipped.FilePath).EscapeMarkup()}[/]");
+        }
+
+        var failedOutput = outputPath + OtherUtil.GetMuxExtension(muxFormat);
+        if (File.Exists(failedOutput))
+            File.Delete(failedOutput);
+
+        result = MuxInputsByFFmpeg(binary, retryInputs, outputPath, muxFormat, dateinfo, copyright, comment);
+        if (result)
+            muxedInputs = retryInputs;
+
+        return result;
+    }
+
+    public static OutputFile[] FilterFfmpegMp4UnsupportedInputs(string binary, OutputFile[] files, MuxFormat muxFormat, bool ffmpegSupportsEac3, out OutputFile[] skipped)
+    {
+        skipped = [];
+        if (muxFormat != MuxFormat.MP4)
+            return files;
+
+        var audioFiles = files.Where(x => x.MediaType == Common.Enum.MediaType.AUDIO).ToArray();
+        var eac3Files = audioFiles.Where(IsEac3Audio).ToArray();
+        if (eac3Files.Length == 0)
+            return files;
+
+        skipped = eac3Files
+            .Where(file => !ffmpegSupportsEac3 || !FFmpegCanMuxEac3ToMp4(binary, file))
+            .ToArray();
+        if (skipped.Length == 0 || skipped.Length == files.Length)
+        {
+            skipped = [];
+            return files;
+        }
+
+        var skippedSet = skipped.ToHashSet();
+        return files.Where(x => !skippedSet.Contains(x)).ToArray();
+    }
+
+    public static bool FFmpegCanMuxEac3ToMp4(string binary, OutputFile file)
+    {
+        if (!File.Exists(file.FilePath))
+            return false;
+
+        var probeOutput = Path.Combine(Path.GetTempPath(), $"n_m3u8dl_re_eac3_probe_{Guid.NewGuid():N}.mp4");
+        try
+        {
+            using var p = new Process();
+            p.StartInfo = new ProcessStartInfo()
+            {
+                FileName = binary,
+                Arguments = $"-loglevel error -nostdin -y -i \"{file.FilePath}\" -t 180 -map 0:a:0 -c copy -strict unofficial -f mp4 \"{probeOutput}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            p.Start();
+            var stdoutTask = p.StandardOutput.ReadToEndAsync();
+            var stderrTask = p.StandardError.ReadToEndAsync();
+            if (!p.WaitForExit(30000))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+                Logger.DebugMarkUp($"[grey]ffmpeg EAC3 MP4 mux probe timed out: {Path.GetFileName(file.FilePath).EscapeMarkup()}[/]");
+                return false;
+            }
+
+            var output = stdoutTask.GetAwaiter().GetResult() + stderrTask.GetAwaiter().GetResult();
+            if (p.ExitCode != 0)
+                Logger.DebugMarkUp($"[grey]ffmpeg EAC3 MP4 mux probe failed for {Path.GetFileName(file.FilePath).EscapeMarkup()}: {output.Trim().EscapeMarkup()}[/]");
+
+            return p.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.DebugMarkUp($"[grey]Failed to probe ffmpeg EAC3 MP4 mux support: {ex.Message.EscapeMarkup()}[/]");
+            return false;
+        }
+        finally
+        {
+            if (File.Exists(probeOutput))
+                File.Delete(probeOutput);
+        }
+    }
+
+    private static bool IsEac3Audio(OutputFile file)
+    {
+        return file.Mediainfos.Any(info =>
+            string.Equals(info.Type, "Audio", StringComparison.OrdinalIgnoreCase) &&
+            ((info.BaseInfo?.Contains("eac3", StringComparison.OrdinalIgnoreCase) ?? false) ||
+             (info.Text?.Contains("ec-3", StringComparison.OrdinalIgnoreCase) ?? false)));
+    }
+
     public static bool MuxInputsByMkvmerge(string binary, OutputFile[] files, string outputPath)
     {
         StringBuilder command = new StringBuilder($"-q --output \"{outputPath}.mkv\" ");

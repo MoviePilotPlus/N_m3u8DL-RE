@@ -12,6 +12,7 @@ internal static class CmafSampleDecryptionUtil
     private static readonly HashSet<string> ContainerBoxes = ["moov", "trak", "mdia", "minf", "stbl", "sinf", "schi", "moof", "traf"];
     private static readonly HashSet<string> VideoSampleEntries = ["avc1", "avc3", "hvc1", "hev1", "dvhe", "dvh1", "encv"];
     private static readonly HashSet<string> AudioSampleEntries = ["mp4a", "enca", "ac-3", "ec-3"];
+    private static readonly HashSet<string> FragmentEncryptionBoxes = ["senc", "saiz", "saio"];
 
     internal static bool TryDecryptFile(string source, string dest, string keyHex, string? init, out string? error)
     {
@@ -55,9 +56,29 @@ internal static class CmafSampleDecryptionUtil
         if (!TryDecryptFragment(output, initInfo, key, out _, out error))
             return false;
 
+        SanitizeDecryptedFragment(output);
+        SanitizeDecryptedInit(output);
+
         WriteOutput(dest, output);
         error = null;
         return true;
+    }
+
+    internal static bool TrySanitizeDecryptedInitFile(string path, out string? error)
+    {
+        try
+        {
+            var data = File.ReadAllBytes(path);
+            if (SanitizeDecryptedInit(data))
+                WriteOutput(path, data);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     internal static bool TryReadInitInfo(byte[] data, out CmafInitInfo info, out string? error)
@@ -547,6 +568,50 @@ internal static class CmafSampleDecryptionUtil
             return HexUtil.BytesToHex(data[(offset + 2)..(offset + 18)]).ToLower();
 
         return null;
+    }
+
+    private static bool SanitizeDecryptedInit(byte[] data)
+    {
+        var changed = false;
+        WalkBoxes(data, 0, data.Length, box =>
+        {
+            if (box.Type == "pssh")
+            {
+                WriteFourCc(data, box.Start + 4, "free");
+                changed = true;
+            }
+        });
+
+        return changed;
+    }
+
+    private static bool SanitizeDecryptedFragment(byte[] data)
+    {
+        return MarkBoxesFree(data, 0, data.Length, boxType => FragmentEncryptionBoxes.Contains(boxType));
+    }
+
+    private static bool MarkBoxesFree(byte[] data, int start, int end, Func<string, bool> shouldFree)
+    {
+        var changed = false;
+        foreach (var box in ReadBoxes(data, start, end))
+        {
+            if (shouldFree(box.Type))
+            {
+                WriteFourCc(data, box.Start + 4, "free");
+                changed = true;
+                continue;
+            }
+
+            if (ContainerBoxes.Contains(box.Type))
+                changed |= MarkBoxesFree(data, box.ContentStart, box.End, shouldFree);
+        }
+
+        return changed;
+    }
+
+    private static void WriteFourCc(byte[] data, int offset, string value)
+    {
+        Encoding.ASCII.GetBytes(value).CopyTo(data.AsSpan(offset, 4));
     }
 
     private static void WriteOutput(string dest, byte[] data)
