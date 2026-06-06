@@ -440,8 +440,8 @@ internal class SimpleDownloadManager
         if (!string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions is { MP4RealTimeDecryption: true, Keys.Length: > 0 } && mp4InitFile != "")
         {
             File.Delete(mp4InitFile);
-            // shaka/ffmpeg实时解密不需要init文件用于合并
-            if (decryptEngine != DecryptEngine.MP4DECRYPT)
+            // shaka/ffmpeg realtime outputs already include init; mp4decrypt/internal CMAF still need it for merge.
+            if (decryptEngine is not DecryptEngine.MP4DECRYPT and not DecryptEngine.CMAF)
             {
                 FileDic!.Remove(streamSpec.Playlist!.MediaInit, out _);
             }
@@ -920,7 +920,7 @@ internal class SimpleDownloadManager
         }
         progress.Columns(progressColumns);
 
-        if (DownloaderConfig.MyOptions is { MP4RealTimeDecryption: true, DecryptionEngine: not DecryptEngine.SHAKA_PACKAGER, Keys.Length: > 0 })
+        if (DownloaderConfig.MyOptions is { MP4RealTimeDecryption: true, DecryptionEngine: not DecryptEngine.SHAKA_PACKAGER and not DecryptEngine.CMAF, Keys.Length: > 0 })
             Logger.WarnMarkUp($"[darkorange3_1]{ResString.realTimeDecMessage}[/]");
 
         await progress.StartAsync(async ctx =>

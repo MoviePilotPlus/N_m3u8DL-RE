@@ -563,8 +563,8 @@ internal class SimpleLiveRecordManager2
                     var files = FileDic.Where(f => f.Key != streamSpec.Playlist!.MediaInit).OrderBy(s => s.Key.Index).Select(f => f.Value).Select(v => v!.ActualFilePath).ToArray();
                     if (initResult != null && mp4InitFile != "")
                     {
-                        // shaka/ffmpeg实时解密不需要init文件用于合并，mp4decrpyt需要
-                        if (string.IsNullOrEmpty(currentKID) || decryptEngine == DecryptEngine.MP4DECRYPT)
+                        // shaka/ffmpeg realtime outputs already include init; mp4decrypt/internal CMAF still need it for merge.
+                        if (string.IsNullOrEmpty(currentKID) || decryptEngine is DecryptEngine.MP4DECRYPT or DecryptEngine.CMAF)
                         {
                             files = [initResult.ActualFilePath, ..files];
                         }
@@ -845,7 +845,7 @@ internal class SimpleLiveRecordManager2
             DownloaderConfig.MyOptions.ConcurrentDownload = true;
             DownloaderConfig.MyOptions.MP4RealTimeDecryption = true;
             DownloaderConfig.MyOptions.LiveRecordLimit ??= TimeSpan.MaxValue;
-            if (DownloaderConfig.MyOptions is { MP4RealTimeDecryption: true, DecryptionEngine: not DecryptEngine.SHAKA_PACKAGER, Keys.Length: > 0 })
+            if (DownloaderConfig.MyOptions is { MP4RealTimeDecryption: true, DecryptionEngine: not DecryptEngine.SHAKA_PACKAGER and not DecryptEngine.CMAF, Keys.Length: > 0 })
                 Logger.WarnMarkUp($"[darkorange3_1]{ResString.realTimeDecMessage}[/]");
             var limit = DownloaderConfig.MyOptions.LiveRecordLimit;
             if (limit != TimeSpan.MaxValue)

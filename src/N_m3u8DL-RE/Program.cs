@@ -173,6 +173,9 @@ internal class Program
                     Logger.Extra($"mp4decrypt => {option.DecryptionBinaryPath}");
                     break;
                 }
+                case DecryptEngine.CMAF:
+                    Logger.Extra("cmaf => internal");
+                    break;
                 case DecryptEngine.FFMPEG:
                 default:
                     option.DecryptionBinaryPath = option.FFmpegBinaryPath;

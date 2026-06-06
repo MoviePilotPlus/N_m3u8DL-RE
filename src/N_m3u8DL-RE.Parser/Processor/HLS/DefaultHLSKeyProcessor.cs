@@ -19,10 +19,12 @@ public class DefaultHLSKeyProcessor : KeyProcessor
         var iv = ParserUtil.GetAttribute(keyLine, "IV");
         var method = ParserUtil.GetAttribute(keyLine, "METHOD");
         var uri = ParserUtil.GetAttribute(keyLine, "URI");
+        var keyFormat = ParserUtil.GetAttribute(keyLine, "KEYFORMAT");
+        var isIdentityKeyFormat = string.IsNullOrEmpty(keyFormat) || keyFormat.Equals("identity", StringComparison.OrdinalIgnoreCase);
 
-        Logger.Debug("METHOD:{},URI:{},IV:{}", method, uri, iv);
+        Logger.Debug("METHOD:{},URI:{},IV:{},KEYFORMAT:{}", method ?? "", uri ?? "", iv ?? "", keyFormat ?? "");
 
-        var encryptInfo = new EncryptInfo(method);
+        var encryptInfo = new EncryptInfo(method ?? "");
 
         // IV
         if (!string.IsNullOrEmpty(iv))
@@ -41,6 +43,10 @@ public class DefaultHLSKeyProcessor : KeyProcessor
             if (parserConfig.CustomeKey is { Length: > 0 })
             {
                 encryptInfo.Key = parserConfig.CustomeKey;
+            }
+            else if (!isIdentityKeyFormat)
+            {
+                Logger.Debug("Skip non-identity HLS key URI: {}", keyFormat ?? "");
             }
             else if (!string.IsNullOrEmpty(uri) && uri.ToLower().StartsWith("base64:"))
             {
@@ -87,7 +93,7 @@ public class DefaultHLSKeyProcessor : KeyProcessor
         
         // 处理自定义加密方式
         encryptInfo.Method = parserConfig.CustomMethod.Value;
-        Logger.Warn("METHOD changed from {} to {}", method, encryptInfo.Method);
+        Logger.Warn("METHOD changed from {} to {}", method ?? "", encryptInfo.Method);
 
         return encryptInfo;
     }

@@ -7,6 +7,10 @@ namespace Mp4SubtitleParser
         public string? PSSH;
         public string? KID;
         public string? Scheme;
+        public int? CryptByteBlock;
+        public int? SkipByteBlock;
+        public int? PerSampleIvSize;
+        public string? DefaultConstantIV;
         public bool isMultiDRM;
     }
 
@@ -82,9 +86,43 @@ namespace Mp4SubtitleParser
                     break;
                 }
             }
-            if (tencIndex != -1 && tencIndex + 12 < data.Length) 
+            if (tencIndex != -1 && tencIndex + 12 < data.Length)
             {
-                info.KID = HexUtil.BytesToHex(data[tencIndex..][12..28]).ToLower();
+                var version = data[tencIndex + 4];
+                var payloadOffset = tencIndex + 8;
+                int constantIvOffset;
+                int perSampleIvSize;
+
+                if (version >= 1 && payloadOffset + 20 <= data.Length)
+                {
+                    var pattern = data[payloadOffset + 1];
+                    info.CryptByteBlock = pattern >> 4;
+                    info.SkipByteBlock = pattern & 0x0F;
+                    perSampleIvSize = data[payloadOffset + 3];
+                    info.KID = HexUtil.BytesToHex(data[(payloadOffset + 4)..(payloadOffset + 20)]).ToLower();
+                    constantIvOffset = payloadOffset + 20;
+                }
+                else if (payloadOffset + 19 <= data.Length)
+                {
+                    info.CryptByteBlock = 0;
+                    info.SkipByteBlock = 0;
+                    perSampleIvSize = data[payloadOffset + 2];
+                    info.KID = HexUtil.BytesToHex(data[(payloadOffset + 3)..(payloadOffset + 19)]).ToLower();
+                    constantIvOffset = payloadOffset + 19;
+                }
+                else
+                {
+                    return;
+                }
+
+                info.PerSampleIvSize = perSampleIvSize;
+                if (perSampleIvSize == 0 && constantIvOffset < data.Length)
+                {
+                    var constantIvSize = data[constantIvOffset];
+                    var start = constantIvOffset + 1;
+                    if (start + constantIvSize <= data.Length)
+                        info.DefaultConstantIV = HexUtil.BytesToHex(data[start..(start + constantIvSize)]).ToLower();
+                }
             }
         }
     }

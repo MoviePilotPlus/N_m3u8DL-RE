@@ -486,9 +486,9 @@ internal static class StaticText
         ),
         ["cmd_decryptionEngine"] = new TextContainer
         (
-            zhCN: "设置解密时使用的第三方程序",
-            zhTW: "設置解密時使用的第三方程序",
-            enUS: "Set the third-party program used for decryption"
+            zhCN: "设置解密引擎 (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
+            zhTW: "設置解密引擎 (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)",
+            enUS: "Set the decryption engine (MP4DECRYPT|SHAKA_PACKAGER|FFMPEG|CMAF)"
         ),
         ["cmd_concurrentDownload"] = new TextContainer
         (

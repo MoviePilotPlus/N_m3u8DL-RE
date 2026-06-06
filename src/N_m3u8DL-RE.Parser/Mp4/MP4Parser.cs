@@ -21,6 +21,7 @@ namespace Mp4SubtitleParser
     class TFHD
     {
         public uint TrackId { get; set; }
+        public uint SampleDescriptionIndex { get; set; }
         public uint DefaultSampleDuration { get; set; }
         public uint DefaultSampleSize { get; set; }
     }
@@ -258,6 +259,7 @@ namespace Mp4SubtitleParser
         public static TFHD ParseTFHD(BinaryReader2 reader, uint flags)
         {
             var trackId = reader.ReadUInt32();
+            uint sampleDescriptionIndex = 0;
             uint defaultSampleDuration = 0;
             uint defaultSampleSize = 0;
 
@@ -267,10 +269,10 @@ namespace Mp4SubtitleParser
                 reader.ReadBytes(8);
             }
 
-            // Skip "sample_description_index" if present.
+            // Read "sample_description_index" if present.
             if ((flags & 0x000002) != 0)
             {
-                reader.ReadBytes(4);
+                sampleDescriptionIndex = reader.ReadUInt32();
             }
 
             // Read "default_sample_duration" if present.
@@ -285,7 +287,7 @@ namespace Mp4SubtitleParser
                 defaultSampleSize = reader.ReadUInt32();
             }
 
-            return new TFHD() { TrackId = trackId, DefaultSampleDuration = defaultSampleDuration, DefaultSampleSize = defaultSampleSize };
+            return new TFHD() { TrackId = trackId, SampleDescriptionIndex = sampleDescriptionIndex, DefaultSampleDuration = defaultSampleDuration, DefaultSampleSize = defaultSampleSize };
         }
 
         public static TRUN ParseTRUN(BinaryReader2 reader, uint version, uint flags)

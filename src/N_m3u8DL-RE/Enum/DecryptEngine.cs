@@ -5,4 +5,5 @@ internal enum DecryptEngine
     MP4DECRYPT,
     SHAKA_PACKAGER,
     FFMPEG,
+    CMAF,
 }

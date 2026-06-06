@@ -70,13 +70,14 @@ Options:
   --log-level <DEBUG|ERROR|INFO|OFF|WARN>                 Set log level [default: INFO]
   --ui-language <en-US|zh-CN|zh-TW>                       Set UI language
   --urlprocessor-args <urlprocessor-args>                 Give these arguments to the URL Processors.
-  --key <key>                                             Set decryption key(s) to mp4decrypt/shaka-packager/ffmpeg.
-                                                          format:
+  --key <key>                                             Set decryption key(s) to mp4decrypt/shaka-packager/ffmpeg
+                                                          or the internal CMAF engine. format:
                                                           --key KID1:KEY1 --key KID2:KEY2
                                                           or use --key KEY if all tracks share the same key.
   --key-text-file <key-text-file>                         Set the kid-key file, the program will search the KEY with
                                                           KID from the file.(Very large file are not recommended)
-  --decryption-engine <FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>  Set the third-party program used for decryption [default:
+  --decryption-engine <CMAF|FFMPEG|MP4DECRYPT|SHAKA_PACKAGER>
+                                                          Set the decryption engine [default:
                                                           MP4DECRYPT]
   --decryption-binary-path <PATH>                         Full path to the tool used for MP4 decryption, like
                                                           C:\Tools\mp4decrypt.exe

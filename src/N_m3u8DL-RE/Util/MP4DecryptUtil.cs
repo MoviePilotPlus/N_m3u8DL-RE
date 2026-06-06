@@ -1,4 +1,5 @@
 ﻿using Mp4SubtitleParser;
+using N_m3u8DL_RE.Crypto;
 using N_m3u8DL_RE.Common.Log;
 using N_m3u8DL_RE.Common.Resource;
 using System.Diagnostics;
@@ -47,6 +48,16 @@ internal static partial class MP4DecryptUtil
         }
             
         if (keyPair == null) return false;
+
+        if (decryptEngine == DecryptEngine.CMAF)
+        {
+            var success = CmafSampleDecryptionUtil.TryDecryptFile(source, dest, GetKeyHex(keyPair), init, out var error);
+            if (!success)
+            {
+                Logger.Error(error ?? ResString.decryptionFailed);
+            }
+            return success;
+        }
 
         // shakaPackager/ffmpeg 无法单独解密init文件
         if (source.EndsWith("_init.mp4") && decryptEngine != DecryptEngine.MP4DECRYPT) return false;
@@ -123,6 +134,12 @@ internal static partial class MP4DecryptUtil
         return false;
     }
 
+    private static string GetKeyHex(string keyPair)
+    {
+        var index = keyPair.IndexOf(':');
+        return index < 0 ? keyPair : keyPair[(index + 1)..];
+    }
+
     private static async Task<bool> RunCommandAsync(string name, string arg, string? workDir = null)
     {
         Logger.DebugMarkUp($"FileName: {name}");
@@ -178,6 +195,9 @@ internal static partial class MP4DecryptUtil
         if (info.Scheme != null) Logger.WarnMarkUp($"[grey]Type: {info.Scheme}[/]");
         if (info.PSSH != null) Logger.WarnMarkUp($"[grey]PSSH(WV): {info.PSSH}[/]");
         if (info.KID != null) Logger.WarnMarkUp($"[grey]KID: {info.KID}[/]");
+        if (info is { CryptByteBlock: not null, SkipByteBlock: not null })
+            Logger.WarnMarkUp($"[grey]Pattern: crypt={info.CryptByteBlock} skip={info.SkipByteBlock} perSampleIv={info.PerSampleIvSize}[/]");
+        if (info.DefaultConstantIV != null) Logger.WarnMarkUp($"[grey]ConstantIV: {info.DefaultConstantIV}[/]");
         return info;
     }
 
