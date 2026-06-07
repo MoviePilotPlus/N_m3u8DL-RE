@@ -184,6 +184,79 @@ public class CmafSampleDecryptionUtilTests
     }
 
     [Fact]
+    public void TryDecryptFile_MergedCmafFileWithoutExternalInit_StreamsAndDecryptsFragments()
+    {
+        var key = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv, includePssh: true);
+
+        var clearLead = Encoding.ASCII.GetBytes("clear-lead-fragment");
+        var clearFragment = BuildClearFragment(clearLead);
+
+        var clearPrefix = Encoding.ASCII.GetBytes("hdr");
+        var clearSuffix = Encoding.ASCII.GetBytes("tail");
+        var plain = Enumerable.Repeat((byte)'Q', 16).ToArray();
+        var encrypted = EncryptCbc(key, iv, plain);
+        var sampleData = Concat(clearPrefix, encrypted, clearSuffix);
+        var encryptedFragment = BuildFragment(sampleData, clearPrefix.Length, encrypted.Length, clearSuffix.Length);
+        var source = Concat(init, clearFragment, encryptedFragment);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sourcePath = Path.Combine(tempDir, "merged.mp4");
+            var destPath = Path.Combine(tempDir, "merged_dec.mp4");
+            File.WriteAllBytes(sourcePath, source);
+
+            Assert.True(CmafSampleDecryptionUtil.TryDecryptFile(sourcePath, destPath, key, null, out var error), error);
+            var output = File.ReadAllBytes(destPath);
+
+            Assert.Equal(0, FindBox(output, "pssh").size);
+            Assert.Equal(0, FindBox(output, "senc").size);
+            Assert.NotEqual(0, FindBox(output, "free").size);
+
+            var firstMdat = FindBox(output, "mdat", init.Length, output.Length);
+            Assert.Equal(clearLead, output[firstMdat.contentStart..(firstMdat.contentStart + clearLead.Length)]);
+
+            var secondMdat = FindBox(output, "mdat", init.Length + clearFragment.Length, output.Length);
+            Assert.Equal(Concat(clearPrefix, plain, clearSuffix), output[secondMdat.contentStart..(secondMdat.contentStart + sampleData.Length)]);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryDecryptFile_MdatWithoutMoof_Fails()
+    {
+        var key = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+        var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();
+        var kid = Enumerable.Range(32, 16).Select(i => (byte)i).ToArray();
+        var init = BuildInit(kid, iv);
+        var source = Concat(init, Box("mdat", Enumerable.Repeat((byte)'X', 16).ToArray()));
+
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sourcePath = Path.Combine(tempDir, "bad.mp4");
+            var destPath = Path.Combine(tempDir, "bad_dec.mp4");
+            File.WriteAllBytes(sourcePath, source);
+
+            Assert.False(CmafSampleDecryptionUtil.TryDecryptFile(sourcePath, destPath, key, null, out var error));
+            Assert.Contains("no preceding moof", error, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(destPath));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void TrySanitizeDecryptedInitFile_FreesPsshWithoutChangingSampleEntry()
     {
         var iv = Enumerable.Range(16, 16).Select(i => (byte)i).ToArray();

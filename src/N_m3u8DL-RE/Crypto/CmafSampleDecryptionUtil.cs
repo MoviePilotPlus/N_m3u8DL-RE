@@ -8,6 +8,8 @@ namespace N_m3u8DL_RE.Crypto;
 internal static class CmafSampleDecryptionUtil
 {
     private const int AesBlockSize = 16;
+    private const int CopyBufferSize = 1024 * 1024;
+    private const int MaxBufferedBoxSize = 0x7FFFFFC7;
     private static readonly byte[] WidevineSystemId = [0xED, 0xEF, 0x8B, 0xA9, 0x79, 0xD6, 0x4A, 0xCE, 0xA3, 0xC8, 0x27, 0xDC, 0xD5, 0x1D, 0x21, 0xED];
     private static readonly HashSet<string> ContainerBoxes = ["moov", "trak", "mdia", "minf", "stbl", "sinf", "schi", "moof", "traf"];
     private static readonly HashSet<string> VideoSampleEntries = ["avc1", "avc3", "hvc1", "hev1", "dvhe", "dvh1", "encv"];
@@ -33,35 +35,38 @@ internal static class CmafSampleDecryptionUtil
             return false;
         }
 
-        var sourceData = File.ReadAllBytes(source);
-        var initData = !string.IsNullOrEmpty(init) && File.Exists(init) ? File.ReadAllBytes(init) : sourceData;
-
-        if (!TryReadInitInfo(initData, out var initInfo, out error))
-            return false;
-
-        if (!initInfo.IsSupportedScheme)
+        try
         {
-            error = $"Unsupported CMAF scheme: {initInfo.Scheme ?? "<none>"}";
-            return false;
-        }
+            if (Path.GetFullPath(source).Equals(Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+            {
+                error = "CMAF decrypt source and destination must be different files.";
+                return false;
+            }
 
-        if (!HasTopLevelBox(sourceData, "mdat"))
-        {
-            WriteOutput(dest, sourceData);
+            if (!TryResolveInitInfo(source, init, out var initInfo, out error))
+                return false;
+
+            if (!initInfo.IsSupportedScheme)
+            {
+                error = $"Unsupported CMAF scheme: {initInfo.Scheme ?? "<none>"}";
+                return false;
+            }
+
+            if (!TryDecryptFileByBoxes(source, dest, initInfo, key, out error))
+            {
+                TryDeletePartialOutput(dest);
+                return false;
+            }
+
             error = null;
             return true;
         }
-
-        var output = (byte[])sourceData.Clone();
-        if (!TryDecryptFragment(output, initInfo, key, out _, out error))
+        catch (Exception ex)
+        {
+            TryDeletePartialOutput(dest);
+            error = ex.Message;
             return false;
-
-        SanitizeDecryptedFragment(output);
-        SanitizeDecryptedInit(output);
-
-        WriteOutput(dest, output);
-        error = null;
-        return true;
+        }
     }
 
     internal static bool TrySanitizeDecryptedInitFile(string path, out string? error)
@@ -122,6 +127,320 @@ internal static class CmafSampleDecryptionUtil
         };
         error = null;
         return true;
+    }
+
+    private static bool TryResolveInitInfo(string source, string? init, out CmafInitInfo info, out string? error)
+    {
+        byte[] initData;
+        if (!string.IsNullOrEmpty(init) && File.Exists(init))
+        {
+            initData = File.ReadAllBytes(init);
+        }
+        else if (!TryReadLeadingInitData(source, out initData, out error))
+        {
+            info = new CmafInitInfo();
+            return false;
+        }
+
+        if (!TryReadInitInfo(initData, out info, out error))
+        {
+            var sourceLength = new FileInfo(source).Length;
+            if (!string.IsNullOrEmpty(init) || sourceLength > MaxBufferedBoxSize)
+                return false;
+
+            initData = File.ReadAllBytes(source);
+            return TryReadInitInfo(initData, out info, out error);
+        }
+
+        return true;
+    }
+
+    private static bool TryReadLeadingInitData(string source, out byte[] initData, out string? error)
+    {
+        using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var buffer = new MemoryStream();
+
+        while (true)
+        {
+            if (!TryReadNextBoxHeader(input, out var box, out error))
+            {
+                initData = buffer.ToArray();
+                return error == null;
+            }
+
+            if (box.Type is "moof" or "mdat")
+            {
+                initData = buffer.ToArray();
+                error = null;
+                return true;
+            }
+
+            if (!TryAppendBox(input, buffer, box, out error))
+            {
+                initData = [];
+                return false;
+            }
+
+            initData = buffer.ToArray();
+            if (TryReadInitInfo(initData, out _, out _))
+            {
+                error = null;
+                return true;
+            }
+        }
+    }
+
+    private static bool TryDecryptFileByBoxes(string source, string dest, CmafInitInfo initInfo, byte[] key, out string? error)
+    {
+        var dir = Path.GetDirectoryName(dest);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var output = new FileStream(dest, FileMode.Create, FileAccess.Write, FileShare.None);
+
+        while (true)
+        {
+            if (!TryReadNextBoxHeader(input, out var box, out error))
+                return error == null;
+
+            if (box.Type == "moof")
+            {
+                if (!TryReadFragmentStartingWithMoof(input, box, out var fragment, out error))
+                    return false;
+
+                if (!TryDecryptFragment(fragment, initInfo, key, out _, out error))
+                    return false;
+
+                SanitizeDecryptedFragment(fragment);
+                SanitizeDecryptedInit(fragment);
+                output.Write(fragment);
+                continue;
+            }
+
+            if (box.Type == "mdat")
+            {
+                error = "CMAF media data has no preceding moof box.";
+                return false;
+            }
+
+            if (box.Type == "moov")
+            {
+                if (!TryReadBufferedBox(input, box, out var data, out error))
+                    return false;
+
+                SanitizeDecryptedInit(data);
+                output.Write(data);
+                continue;
+            }
+
+            if (!TryCopyBox(input, output, box, out error))
+                return false;
+        }
+    }
+
+    private static bool TryReadFragmentStartingWithMoof(FileStream input, StreamBox moof, out byte[] fragment, out string? error)
+    {
+        using var buffer = new MemoryStream();
+        if (!TryAppendBox(input, buffer, moof, out error))
+        {
+            fragment = [];
+            return false;
+        }
+
+        while (true)
+        {
+            if (!TryReadNextBoxHeader(input, out var next, out error))
+            {
+                fragment = [];
+                error ??= "CMAF moof has no following mdat box.";
+                return false;
+            }
+
+            if (next.Type == "moof")
+            {
+                fragment = [];
+                error = "CMAF moof has no following mdat box.";
+                return false;
+            }
+
+            if (!TryAppendBox(input, buffer, next, out error))
+            {
+                fragment = [];
+                return false;
+            }
+
+            if (next.Type == "mdat")
+            {
+                fragment = buffer.ToArray();
+                error = null;
+                return true;
+            }
+        }
+    }
+
+    private static bool TryReadBufferedBox(Stream input, StreamBox box, out byte[] data, out string? error)
+    {
+        using var buffer = new MemoryStream();
+        if (!TryAppendBox(input, buffer, box, out error))
+        {
+            data = [];
+            return false;
+        }
+
+        data = buffer.ToArray();
+        return true;
+    }
+
+    private static bool TryAppendBox(Stream input, Stream output, StreamBox box, out string? error)
+    {
+        if (box.Size > MaxBufferedBoxSize || output.Length + box.Size > MaxBufferedBoxSize)
+        {
+            error = $"CMAF box {box.Type} is too large to buffer: {box.Size} bytes.";
+            return false;
+        }
+
+        output.Write(box.Header);
+        if (!TryCopyExact(input, output, box.ContentSize, out error))
+            return false;
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCopyBox(Stream input, Stream output, StreamBox box, out string? error)
+    {
+        output.Write(box.Header);
+        if (!TryCopyExact(input, output, box.ContentSize, out error))
+            return false;
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCopyExact(Stream input, Stream output, long bytesToCopy, out string? error)
+    {
+        var buffer = new byte[Math.Min(CopyBufferSize, checked((int)Math.Min(bytesToCopy, CopyBufferSize)))];
+        var remaining = bytesToCopy;
+        while (remaining > 0)
+        {
+            var readSize = (int)Math.Min(buffer.Length, remaining);
+            var read = input.Read(buffer, 0, readSize);
+            if (read <= 0)
+            {
+                error = "Unexpected end of file while reading CMAF box.";
+                return false;
+            }
+
+            output.Write(buffer, 0, read);
+            remaining -= read;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryReadNextBoxHeader(FileStream input, out StreamBox box, out string? error)
+    {
+        var start = input.Position;
+        var remaining = input.Length - start;
+        if (remaining == 0)
+        {
+            box = default;
+            error = null;
+            return false;
+        }
+
+        if (remaining < 8)
+        {
+            box = default;
+            error = "Unexpected end of file while reading CMAF box header.";
+            return false;
+        }
+
+        var header = new byte[8];
+        if (!ReadExact(input, header))
+        {
+            box = default;
+            error = "Unexpected end of file while reading CMAF box header.";
+            return false;
+        }
+
+        var size = (long)BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(0, 4));
+        var headerSize = 8;
+        var type = FourCc(header.AsSpan(4, 4));
+        if (size == 1)
+        {
+            if (remaining < 16)
+            {
+                box = default;
+                error = $"CMAF box {type} has an incomplete large-size header.";
+                return false;
+            }
+
+            var largeSizeBytes = new byte[8];
+            if (!ReadExact(input, largeSizeBytes))
+            {
+                box = default;
+                error = $"CMAF box {type} has an incomplete large-size header.";
+                return false;
+            }
+
+            size = checked((long)BinaryPrimitives.ReadUInt64BigEndian(largeSizeBytes));
+            headerSize = 16;
+            var extendedHeader = new byte[16];
+            Buffer.BlockCopy(header, 0, extendedHeader, 0, header.Length);
+            Buffer.BlockCopy(largeSizeBytes, 0, extendedHeader, header.Length, largeSizeBytes.Length);
+            header = extendedHeader;
+        }
+        else if (size == 0)
+        {
+            size = remaining;
+        }
+
+        if (size < headerSize)
+        {
+            box = default;
+            error = $"Invalid CMAF box {type} size: {size}.";
+            return false;
+        }
+
+        if (size > remaining)
+        {
+            box = default;
+            error = $"CMAF box {type} extends beyond the end of file.";
+            return false;
+        }
+
+        box = new StreamBox(start, size, header, type);
+        error = null;
+        return true;
+    }
+
+    private static bool ReadExact(Stream input, byte[] buffer)
+    {
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = input.Read(buffer, offset, buffer.Length - offset);
+            if (read <= 0)
+                return false;
+            offset += read;
+        }
+
+        return true;
+    }
+
+    private static void TryDeletePartialOutput(string dest)
+    {
+        try
+        {
+            if (File.Exists(dest))
+                File.Delete(dest);
+        }
+        catch
+        {
+        }
     }
 
     internal static bool TryDecryptFragment(byte[] data, CmafInitInfo initInfo, byte[] key, out bool decryptedAny, out string? error)
@@ -533,11 +852,6 @@ internal static class CmafSampleDecryptionUtil
         }
     }
 
-    private static bool HasTopLevelBox(byte[] data, string type)
-    {
-        return ReadBoxes(data, 0, data.Length).Any(box => box.Type == type);
-    }
-
     private static string? TryReadWidevineKidFromPssh(byte[] data, Box box)
     {
         if (box.ContentStart + 24 > box.End)
@@ -669,6 +983,11 @@ internal static class CmafSampleDecryptionUtil
         public int? DataOffset { get; init; }
         public List<uint> SampleSizes { get; init; } = [];
         public List<SencSample> SencSamples { get; init; } = [];
+    }
+
+    private readonly record struct StreamBox(long Start, long Size, byte[] Header, string Type)
+    {
+        public long ContentSize => Size - Header.Length;
     }
 
     private readonly record struct Box(int Start, int Size, int HeaderSize, string Type)
