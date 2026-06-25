@@ -358,11 +358,11 @@ zh-TW;chi;中文（繁體, 台灣）;中文
 zh-Hant-TW;chi;中文（繁體, 台灣）;中文
 zh-HK;chi;中文（繁體, 香港）;中文
 zh-Hant-HK;chi;中文（繁體, 香港）;中文
-yue;chi;中文（繁體）;粵語
+yue;yue;粤语;粤语
 cmn;chi;中文（简体）;普通话
 cmn-Hans;chi;中文（简体）;普通话
 cmn-Hant;chi;中文（繁體）;普通話
-Cantonese;chi;中文;粵語
+Cantonese;yue;粤语;粤语
 Mandarin;chi;中文;普通话
 Japanese;jpn;日本語;日本語
 Korean;kor;한국어;한국어
@@ -485,6 +485,9 @@ gd;gla
 nn;nno
 bs;bos
 sr;srp
+guoyu;cmn
+jp;jpn
+yue;yue
 "
         .Trim().Replace("\r", "").Split('\n').Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToDictionary(x => x.Split(';').First().Trim(), x => x.Split(';').Last().Trim());
 
