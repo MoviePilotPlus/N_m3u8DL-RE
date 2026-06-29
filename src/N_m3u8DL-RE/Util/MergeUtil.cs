@@ -171,7 +171,7 @@ internal static class MergeUtil
         return code == 0;
     }
 
-    public static bool MuxInputsByFFmpeg(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, string copyright = "", string comment = "")
+    public static bool MuxInputsByFFmpeg(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, string copyright = "", string comment = "", string? metadataFile = null)
     {
         var ext = OtherUtil.GetMuxExtension(muxFormat);
         string dateString = DateTime.Now.ToString("o");
@@ -181,6 +181,14 @@ internal static class MergeUtil
         foreach (var item in files)
         {
             command.Append($" -i \"{item.FilePath}\" ");
+        }
+
+        // 如果有元数据文件（FFMETADATA，含章节），在 MAP 之前作为额外输入添加
+        int metadataInputIndex = -1;
+        if (!string.IsNullOrEmpty(metadataFile) && File.Exists(metadataFile))
+        {
+            command.Append($" -i \"{metadataFile}\" ");
+            metadataInputIndex = files.Length;
         }
 
         // MAP
@@ -199,8 +207,11 @@ internal static class MergeUtil
             command.Append($" -strict unofficial -c:a copy -c:v copy -c:s {(srt ? "srt" : "webvtt")} ");
         else throw new ArgumentException($"unknown format: {muxFormat}");
 
-        // CLEAN
-        command.Append(" -map_metadata -1 ");
+        // CLEAN / METADATA
+        if (metadataInputIndex >= 0)
+            command.Append($" -map_metadata {metadataInputIndex} ");
+        else
+            command.Append(" -map_metadata -1 ");
 
         // LANG and NAME
         var streamIndex = 0;
@@ -278,7 +289,7 @@ internal static class MergeUtil
         }
     }
 
-    public static bool MuxInputsByFFmpegWithFallback(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, out OutputFile[] muxedInputs, string copyright = "", string comment = "")
+    public static bool MuxInputsByFFmpegWithFallback(string binary, OutputFile[] files, string outputPath, MuxFormat muxFormat, bool dateinfo, out OutputFile[] muxedInputs, string copyright = "", string comment = "", string? metadataFile = null)
     {
         var ffmpegSupportsEac3 = FFmpegSupportsEac3(binary);
         muxedInputs = FilterFfmpegMp4UnsupportedInputs(binary, files, muxFormat, ffmpegSupportsEac3, out var skippedInputs);
@@ -290,7 +301,7 @@ internal static class MergeUtil
             Logger.WarnMarkUp($"[yellow]{reason}. Keep audio outside MP4 mux: {Path.GetFileName(skipped.FilePath).EscapeMarkup()}[/]");
         }
 
-        var result = MuxInputsByFFmpeg(binary, muxedInputs, outputPath, muxFormat, dateinfo, copyright, comment);
+        var result = MuxInputsByFFmpeg(binary, muxedInputs, outputPath, muxFormat, dateinfo, copyright, comment, metadataFile);
         if (result || muxFormat != MuxFormat.MP4 || !ffmpegSupportsEac3)
             return result;
 
@@ -308,7 +319,7 @@ internal static class MergeUtil
         if (File.Exists(failedOutput))
             File.Delete(failedOutput);
 
-        result = MuxInputsByFFmpeg(binary, retryInputs, outputPath, muxFormat, dateinfo, copyright, comment);
+        result = MuxInputsByFFmpeg(binary, retryInputs, outputPath, muxFormat, dateinfo, copyright, comment, metadataFile);
         if (result)
             muxedInputs = retryInputs;
 

@@ -975,7 +975,7 @@ internal class SimpleLiveRecordManager2
             }
             else
             {
-                result = MergeUtil.MuxInputsByFFmpegWithFallback(DownloaderConfig.MyOptions.FFmpegBinaryPath!, muxInputs, outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo, out muxInputs, DownloaderConfig.MyOptions.CopyrightInfo ?? "", DownloaderConfig.MyOptions.CommnetInfo ?? "");
+                result = MergeUtil.MuxInputsByFFmpegWithFallback(DownloaderConfig.MyOptions.FFmpegBinaryPath!, muxInputs, outPath, DownloaderConfig.MyOptions.MuxOptions.MuxFormat, !DownloaderConfig.MyOptions.NoDateInfo, out muxInputs, DownloaderConfig.MyOptions.CopyrightInfo ?? "", DownloaderConfig.MyOptions.CommnetInfo ?? "", DownloaderConfig.MyOptions.MuxMetadataFile);
             }
             // 完成后删除各轨道文件
             if (result)

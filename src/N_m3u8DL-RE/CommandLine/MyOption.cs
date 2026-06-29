@@ -57,6 +57,10 @@ internal class MyOption
     /// </summary>
     public string? CommnetInfo { get; set; }
     /// <summary>
+    /// 混流时写入的元数据文件路径(FFMETADATA格式，用于章节信息)
+    /// </summary>
+    public string? MuxMetadataFile { get; set; }
+    /// <summary>
     /// See: <see cref="CommandInvoker.NoLog"/>.
     /// </summary>
     public bool NoLog { get; set; }

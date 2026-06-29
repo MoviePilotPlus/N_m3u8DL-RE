@@ -53,6 +53,7 @@ internal static partial class CommandInvoker
     private static readonly Option<bool> NoDateInfo = new Option<bool>("--no-date-info") { Description = ResString.cmd_noDateInfo }.WithDefault(false);
     private static readonly Option<string?> CopyrightInfo = new("--copyright-info") { Description = ResString.cmd_copyrightInfo };
     private static readonly Option<string?> CommnetInfo = new("--commnet-info") { Description = ResString.cmd_commnetInfo };
+    private static readonly Option<string?> MuxMetadataFile = new("--mux-metadata-file") { Description = "混流时写入的元数据文件路径(FFMETADATA格式，用于章节信息)" };
     private static readonly Option<bool> BinaryMerge = new Option<bool>("--binary-merge") { Description = ResString.cmd_binaryMerge }.WithDefault(false);
     private static readonly Option<bool> UseFFmpegConcatDemuxer = new Option<bool>("--use-ffmpeg-concat-demuxer") { Description = ResString.cmd_useFFmpegConcatDemuxer }.WithDefault(false);
     private static readonly Option<bool> DelAfterDone = new Option<bool>("--del-after-done") { Description = ResString.cmd_delAfterDone }.WithDefault(true);
@@ -677,6 +678,7 @@ internal static partial class CommandInvoker
             NoDateInfo = result.GetValue(NoDateInfo),
             CopyrightInfo = result.GetValue(CopyrightInfo),
             CommnetInfo = result.GetValue(CommnetInfo),
+            MuxMetadataFile = result.GetValue(MuxMetadataFile),
             NoLog = result.GetValue(NoLog),
             AllowHlsMultiExtMap = result.GetValue(AllowHlsMultiExtMap),
             AdKeywords = result.GetValue(AdKeywords),
@@ -735,7 +737,7 @@ internal static partial class CommandInvoker
         var rootCommand = new RootCommand(VERSION_INFO)
         {
             Input, TmpDir, SaveDir, SaveName, SavePattern, LogFilePath, BaseUrl, ThreadCount, DownloadRetryCount, HttpRequestTimeout, ForceAnsiConsole, NoAnsiColor,AutoSelect, SkipMerge, SkipDownload, CheckSegmentsCount,
-            BinaryMerge, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, CopyrightInfo, CommnetInfo, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, SubOnly, SubtitleFormat, AutoSubtitleFix,
+            BinaryMerge, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, CopyrightInfo, CommnetInfo, MuxMetadataFile, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, SubOnly, SubtitleFormat, AutoSubtitleFix,
             FFmpegBinaryPath,
             LogLevel, UILanguage, UrlProcessorArgs, Keys, KeyTextFile, DecryptionEngine, DecryptionBinaryPath, UseShakaPackager, MP4RealTimeDecryption, SkipSubtitleDecrypt, SkipAudioDecrypt, ForceMuxDolby,
             MaxSpeed,
