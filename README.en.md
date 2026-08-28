@@ -247,38 +247,25 @@ Examples:
 
 </details>
 
-## Screenshots
-
-### On-demand
-
-![RE1](img/RE.gif)
-
-Can also download in parallel and automatically mix streams
-
-![RE2](img/RE2.gif)
-
-### Live
-
-Record TS live source:
-
-[click to show gif](http://pan.iqiyi.com/file/paopao/W0LfmaMRvuA--uCdOpZ1cldM5JCVhMfIm7KFqr4oKCz80jLn0bBb-9PWmeCFZ-qHpAaQydQ1zk-CHYT_UbRLtw.gif)
-
-Record MPD live source:
-
-[click to show gif](http://pan.iqiyi.com/file/paopao/nmAV5MOh0yIyHhnxdgM_6th_p2nqrFsM4k-o3cUPwUa8Eh8QOU4uyPkLa_BlBrMa3GBnKWSk8rOaUwbsjKN14g.gif)
-
-During recording, use ffmpeg to mix audio and video in real time
-
-```bash
-ffmpeg -readrate 1 -i 2022-09-21_19-54-42_V.mp4 -i 2022-09-21_19-54-42_V.chi.m4a -c copy 2022-09-21_19-54-42_V.ts
-```
-
+## Others
 From v0.1.5, you can try to enable `live-pipe-mux` instead of the above command
 
 > [!NOTE]
 > If the network environment is not stable, do not enable `live-pipe-mux`. The data read in the pipeline is handled by ffmpeg, and it is easy to lose live data in some environments.
 
 From v0.1.8, you can set the environment variable `RE_LIVE_PIPE_OPTIONS` to change some options of ffmpeg when `live-pipe-mux` is enabled: <https://github.com/nilaoda/N_m3u8DL-RE/issues/162#issuecomment-1592462532>
+
+---
+
+**Disclaimer**
+
+This software is open-sourced under the [MIT License](LICENSE) and is provided "as is", without any express or implied warranties (including but not limited to the warranties of merchantability and fitness for a particular purpose). In no event shall the authors be liable for any direct or indirect damages arising from the use of this software.
+
+**Legal Use**
+
+This software is intended for learning and technical research purposes only. Users shall comply with applicable laws and regulations in their country or region, and only download streaming content for which they have legal permission. Any illegal or infringing use is unrelated to the original author, and users shall bear all legal responsibilities themselves.
+
+---
 
 ## Donate
 

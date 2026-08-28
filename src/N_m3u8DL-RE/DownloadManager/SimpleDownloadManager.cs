@@ -390,7 +390,16 @@ internal class SimpleDownloadManager
             if (result is { Success: true }) 
             {
                 mp4Info = MP4DecryptUtil.GetMP4Info(result.ActualFilePath);
-                currentKID = mp4Info.KID;
+                // MPD的cenc:default_KID优先
+                if (streamSpec.Playlist?.MediaInit?.EncryptInfo.KID != null)
+                {
+                    currentKID = streamSpec.Playlist.MediaInit.EncryptInfo.KID;
+                    Logger.WarnMarkUp($"[grey]KID (from MPD): {currentKID}[/]");
+                }
+                else
+                {
+                    currentKID = mp4Info.KID;
+                }
                 // try shaka packager, which can handle WebM
                 if (string.IsNullOrEmpty(currentKID) && DownloaderConfig.MyOptions.DecryptionEngine == DecryptEngine.SHAKA_PACKAGER) {
                     currentKID = MP4DecryptUtil.ReadInitShaka(result.ActualFilePath, ResolveDecryptionBinaryPath());
@@ -505,8 +514,16 @@ internal class SimpleDownloadManager
                 // 读取init信息
                 if (string.IsNullOrEmpty(currentKID))
                 {
-                    mp4Info = MP4DecryptUtil.GetMP4Info(result.ActualFilePath);
-                    currentKID = mp4Info.KID;
+                    // MPD的cenc:default_KID优先
+                    if (streamSpec.Playlist?.MediaInit?.EncryptInfo.KID != null)
+                    {
+                        currentKID = streamSpec.Playlist.MediaInit.EncryptInfo.KID;
+                        Logger.WarnMarkUp($"[grey]KID (from MPD): {currentKID}[/]");
+                    }
+                    else
+                    {
+                        currentKID = MP4DecryptUtil.GetMP4Info(result.ActualFilePath).KID;
+                    }
                 }
                 // try shaka packager, which can handle WebM
                 if (string.IsNullOrEmpty(currentKID) &&  DownloaderConfig.MyOptions.DecryptionEngine == DecryptEngine.SHAKA_PACKAGER) {
@@ -1051,8 +1068,16 @@ internal class SimpleDownloadManager
         // 重新读取init信息
         if (mergeSuccess && totalCount >= 1 && string.IsNullOrEmpty(currentKID) && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.NONE && streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.BBTS && (streamSpec.Playlist!.MediaParts.First().MediaSegments.First().EncryptInfo.Method != Common.Enum.EncryptMethod.AES_128_YK || aes128YkFmp4))
         {
-            mp4Info = MP4DecryptUtil.GetMP4Info(output);
-            currentKID = mp4Info.KID;
+            // MPD的cenc:default_KID优先
+            if (streamSpec.Playlist?.MediaInit?.EncryptInfo.KID != null)
+            {
+                currentKID = streamSpec.Playlist.MediaInit.EncryptInfo.KID;
+                Logger.WarnMarkUp($"[grey]KID (from MPD): {currentKID}[/]");
+            }
+            else
+            {
+                currentKID = MP4DecryptUtil.GetMP4Info(output).KID;
+            }
             // try shaka packager, which can handle WebM
             if (string.IsNullOrEmpty(currentKID) &&  DownloaderConfig.MyOptions.DecryptionEngine == DecryptEngine.SHAKA_PACKAGER) {
                 currentKID = MP4DecryptUtil.ReadInitShaka(output, ResolveDecryptionBinaryPath());

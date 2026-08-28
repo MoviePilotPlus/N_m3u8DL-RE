@@ -62,6 +62,7 @@ public class StreamExtractor
         LoadSourceFromText(this.rawText);
     }
 
+    [MemberNotNull(nameof(rawText), nameof(extractor))]
     private void LoadSourceFromText(string rawText)
     {
         var rawType = "txt";

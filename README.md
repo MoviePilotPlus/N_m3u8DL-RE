@@ -271,38 +271,25 @@ More Help:
 
 </details>
 
-## 运行截图
-
-### 点播
-
-![RE1](img/RE.gif)
-
-还可以并行下载+自动混流
-
-![RE2](img/RE2.gif)
-
-### 直播
-
-录制TS直播源：
-
-[click to show gif](http://pan.iqiyi.com/file/paopao/W0LfmaMRvuA--uCdOpZ1cldM5JCVhMfIm7KFqr4oKCz80jLn0bBb-9PWmeCFZ-qHpAaQydQ1zk-CHYT_UbRLtw.gif)
-
-录制MPD直播源：
-
-[click to show gif](http://pan.iqiyi.com/file/paopao/nmAV5MOh0yIyHhnxdgM_6th_p2nqrFsM4k-o3cUPwUa8Eh8QOU4uyPkLa_BlBrMa3GBnKWSk8rOaUwbsjKN14g.gif)
-
-录制过程中，借助ffmpeg完成对音视频的实时混流
-
-```
-ffmpeg -readrate 1 -i 2022-09-21_19-54-42_V.mp4 -i 2022-09-21_19-54-42_V.chi.m4a -c copy 2022-09-21_19-54-42_V.ts
-```
-
+## 其他
 从 v0.1.5 开始，可以尝试开启 `live-pipe-mux` 来代替以上命令
 
 > [!NOTE]
 > 如果网络环境不够稳定，请不要开启 `live-pipe-mux`。管道内数据读取由 ffmpeg 负责，在某些环境下容易丢失直播数据。
 
 从 v0.1.8 开始，能够通过设置环境变量 `RE_LIVE_PIPE_OPTIONS` 来改变 `live-pipe-mux` 时 ffmpeg 的某些选项： <https://github.com/nilaoda/N_m3u8DL-RE/issues/162#issuecomment-1592462532>
+
+---
+
+**免责声明**
+
+本软件基于 [MIT License](LICENSE) 开源，按"原样"提供，不附带任何明示或暗示的保证（包括但不限于对适销性、特定用途适用性的保证）。在任何情况下，作者均不对因使用本软件而产生的任何直接或间接损失承担责任。
+
+**合法使用**
+
+本软件仅用于学习和技术研究目的。使用者应遵守所在国家或地区的法律法规，仅下载和获取拥有合法权限的流媒体内容。任何非法或侵权使用行为均与原作者无关，使用者需自行承担全部法律责任。
+
+---
 
 ## 赞助
 

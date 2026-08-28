@@ -254,7 +254,8 @@ internal static partial class MP4DecryptUtil
         var info = MP4InitUtil.ReadInit(data);
         if (info.Scheme != null) Logger.WarnMarkUp($"[grey]Type: {info.Scheme}[/]");
         if (info.PSSH != null) Logger.WarnMarkUp($"[grey]PSSH(WV): {info.PSSH}[/]");
-        if (info.KID != null) Logger.WarnMarkUp($"[grey]KID: {info.KID}[/]");
+        // 零值KID不打印，避免误导
+        if (info.KID != null && info.KID != ZeroKid) Logger.WarnMarkUp($"[grey]KID: {info.KID}[/]");
         if (info is { CryptByteBlock: not null, SkipByteBlock: not null })
             Logger.WarnMarkUp($"[grey]Pattern: crypt={info.CryptByteBlock} skip={info.SkipByteBlock} perSampleIv={info.PerSampleIvSize}[/]");
         if (info.DefaultConstantIV != null) Logger.WarnMarkUp($"[grey]ConstantIV: {info.DefaultConstantIV}[/]");
