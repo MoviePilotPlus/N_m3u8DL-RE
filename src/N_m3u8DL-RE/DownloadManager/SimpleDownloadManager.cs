@@ -86,6 +86,18 @@ internal class SimpleDownloadManager
         return streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.AES_128_YK)) == true;
     }
 
+    private bool ShouldUseChacha20(StreamSpec streamSpec)
+    {
+        if (streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.CHACHA20)) == true)
+        {
+            return true;
+        }
+
+        // 用户显式指定 --custom-hls-method CHACHA20（m3u8 内 EXT-X-KEY 不可信/
+        // 缺失时由后端注入 key+iv，与 AES_128_YK 同款启用路径）
+        return DownloaderConfig.MyOptions.CustomHLSMethod == Common.Enum.EncryptMethod.CHACHA20;
+    }
+
     private bool ShouldUseBBTS(StreamSpec streamSpec)
     {
         if (streamSpec.Playlist?.MediaParts.Any(p => p.MediaSegments.Any(s => s.EncryptInfo.Method == Common.Enum.EncryptMethod.BBTS)) == true)
@@ -163,6 +175,59 @@ internal class SimpleDownloadManager
         catch (Exception ex)
         {
             Logger.DebugMarkUp($"[grey]Failed to delete encrypted AES_128_YK segment {Path.GetFileName(enc).EscapeMarkup()}: {ex.Message.EscapeMarkup()}[/]");
+        }
+    }
+
+    /// <summary>
+    /// CHACHA20 分段实时解密（参考 AES_128_YK 的管理器级形态）：
+    /// 下载完成立即解密为 _dec 文件、删除密文原文件并更新结果路径，
+    /// 合并阶段拿到的全是明文；_dec 已存在（断点续传）时直接复用。
+    /// </summary>
+    private void DecryptChacha20Segment(DownloadResult result, MediaSegment segment, byte[] keyBytes)
+    {
+        var enc = result.ActualFilePath;
+        var dec = Path.Combine(Path.GetDirectoryName(enc)!, Path.GetFileNameWithoutExtension(enc) + "_dec" + Path.GetExtension(enc));
+
+        if (Path.GetFileNameWithoutExtension(enc).EndsWith("_dec", StringComparison.OrdinalIgnoreCase))
+        {
+            result.ActualContentLength = new FileInfo(enc).Length;
+            return;
+        }
+
+        if (File.Exists(dec))
+        {
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+            return;
+        }
+
+        var nonce = segment.EncryptInfo.IV;
+        if (nonce == null || (nonce.Length != 8 && nonce.Length != 12))
+        {
+            throw new InvalidDataException($"CHACHA20 segment has invalid nonce: {Path.GetFileName(enc)}");
+        }
+
+        try
+        {
+            var fileBytes = File.ReadAllBytes(enc);
+            var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, keyBytes, nonce);
+            File.WriteAllBytes(dec, decrypted);
+            result.ActualFilePath = dec;
+            result.ActualContentLength = new FileInfo(dec).Length;
+        }
+        catch
+        {
+            if (File.Exists(dec)) File.Delete(dec);
+            throw;
+        }
+
+        try
+        {
+            File.Delete(enc);
+        }
+        catch (Exception ex)
+        {
+            Logger.DebugMarkUp($"[grey]Failed to delete encrypted CHACHA20 segment {Path.GetFileName(enc).EscapeMarkup()}: {ex.Message.EscapeMarkup()}[/]");
         }
     }
 
@@ -289,6 +354,10 @@ internal class SimpleDownloadManager
         var aes128YkTs = useAes128Yk && playlist.MediaInit == null;
         var aes128YkSegmentDecrypt = aes128YkTs && !splitSingleFile;
         var aes128YkKeyBytes = aes128YkSegmentDecrypt ? GetCustomHlsKeyBytes() : null;
+        // CHACHA20 实时解密（per-1024 块方案与文件结构无关，fMP4/TS 均可逐段解）
+        var useChacha20 = ShouldUseChacha20(streamSpec);
+        var chacha20SegmentDecrypt = useChacha20 && !splitSingleFile;
+        var chacha20KeyBytes = useChacha20 ? GetCustomHlsKeyBytes() : null;
 
         string ResolveDecryptionBinaryPath()
         {
@@ -383,6 +452,12 @@ internal class SimpleDownloadManager
             {
                 throw new Exception("Download init file failed!");
             }
+            // CHACHA20 init 段实时解密（init 若被标记为 CHACHA20，与分片同方案）
+            if (chacha20SegmentDecrypt && chacha20KeyBytes != null
+                && streamSpec.Playlist.MediaInit.EncryptInfo.Method == Common.Enum.EncryptMethod.CHACHA20)
+            {
+                DecryptChacha20Segment(result, streamSpec.Playlist.MediaInit, chacha20KeyBytes);
+            }
             mp4InitFile = result.ActualFilePath;
             task.Increment(1);
 
@@ -463,6 +538,19 @@ internal class SimpleDownloadManager
             Logger.WarnMarkUp("[yellow]No AES_128_YK key provided! Segment decryption disabled.[/]");
         }
 
+        if (useChacha20 && splitSingleFile)
+        {
+            Logger.WarnMarkUp("[yellow]CHACHA20 single-file range split detected. Segment decryption is disabled; decrypt after merge.[/]");
+        }
+        else if (chacha20SegmentDecrypt && chacha20KeyBytes != null)
+        {
+            Logger.InfoMarkUp("[grey]CHACHA20 segment decryption enabled.[/]");
+        }
+        else if (chacha20SegmentDecrypt)
+        {
+            Logger.WarnMarkUp("[yellow]No CHACHA20 key provided! Segment decryption disabled.[/]");
+        }
+
         // 计算填零个数
         var pad = "0".PadLeft(segments.Count().ToString().Length, '0');
 
@@ -490,6 +578,10 @@ internal class SimpleDownloadManager
                 else if (aes128YkSegmentDecrypt && aes128YkKeyBytes != null)
                 {
                     DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
+                }
+                else if (chacha20SegmentDecrypt && chacha20KeyBytes != null)
+                {
+                    DecryptChacha20Segment(result, seg, chacha20KeyBytes);
                 }
 
                 // 修复MSS init
@@ -581,6 +673,10 @@ internal class SimpleDownloadManager
             else if (aes128YkSegmentDecrypt && result is { Success: true } && aes128YkKeyBytes != null)
             {
                 DecryptAes128YkTsSegment(result, aes128YkKeyBytes);
+            }
+            else if (chacha20SegmentDecrypt && result is { Success: true } && chacha20KeyBytes != null)
+            {
+                DecryptChacha20Segment(result, seg, chacha20KeyBytes);
             }
 
             // 实时解密
@@ -1049,6 +1145,34 @@ internal class SimpleDownloadManager
                     else
                     {
                         Logger.WarnMarkUp("[yellow]No AES_128_YK key provided! Skip decryption![/]");
+                    }
+                }
+
+                // 检测并解密 CHACHA20（单文件切分场景：分片阶段无法按块对齐，
+                // 合并后整体解密——per-1024 块计数相对整文件起点，合并后恰好对齐）
+                if (useChacha20 && !chacha20SegmentDecrypt && mergeSuccess && File.Exists(output))
+                {
+                    byte[]? keyBytes = GetCustomHlsKeyBytes();
+                    var nonce = streamSpec.Playlist?.MediaParts.FirstOrDefault()?.MediaSegments.FirstOrDefault()?.EncryptInfo.IV;
+
+                    if (keyBytes != null && nonce != null)
+                    {
+                        Logger.InfoMarkUp("[grey]Decrypting CHACHA20...[/]");
+
+                        try
+                        {
+                            var fileBytes = await File.ReadAllBytesAsync(output);
+                            var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, keyBytes, nonce);
+                            await File.WriteAllBytesAsync(output, decrypted);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.ErrorMarkUp($"[red]CHACHA20 decryption failed: {ex.Message}[/]");
+                        }
+                    }
+                    else
+                    {
+                        Logger.WarnMarkUp("[yellow]No CHACHA20 key/iv provided! Skip decryption![/]");
                     }
                 }
             }

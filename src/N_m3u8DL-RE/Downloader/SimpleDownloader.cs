@@ -43,16 +43,9 @@ internal class SimpleDownloader : IDownloader
                     AESUtil.AES128Decrypt(dResult.ActualFilePath, key!, iv!, System.Security.Cryptography.CipherMode.ECB);
                     break;
                 }
-                case EncryptMethod.CHACHA20:
-                {
-                    var key = segment.EncryptInfo.Key;
-                    var nonce = segment.EncryptInfo.IV;
-
-                    var fileBytes = File.ReadAllBytes(dResult.ActualFilePath);
-                    var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, key!, nonce!);
-                    await File.WriteAllBytesAsync(dResult.ActualFilePath, decrypted);
-                    break;
-                }
+                // CHACHA20 解密已上移至 SimpleDownloadManager（参考 AES_128_YK 的
+                // 管理器级实时解密：_dec 断点标记 + 删密文 + 单文件切分守卫），
+                // 此处不再处理，避免双重解密。
                 case EncryptMethod.SAMPLE_AES_CTR:
                     // throw new NotSupportedException("SAMPLE-AES-CTR");
                     break;
