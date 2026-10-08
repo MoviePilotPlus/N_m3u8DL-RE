@@ -202,6 +202,11 @@ internal partial class SimpleDownloadManager
     /// CHACHA20 分段实时解密（参考 AES_128_YK 的管理器级形态）：
     /// 下载完成立即解密为 _dec 文件、删除密文原文件并更新结果路径，
     /// 合并阶段拿到的全是明文；_dec 已存在（断点续传）时直接复用。
+    /// nonce 取值优先级：分片 EncryptInfo.IV → --custom-hls-iv（腾讯的
+    /// nonce 全片固定，媒体子表无 KEY 行时分片 IV 可能为段序号派生值或空，
+    /// 段序号派生的 32 字节值不是有效 nonce，直接回落命令行注入值）。
+    /// nonce 最终不可用时告警跳过该段解密（保留密文待合并层处理），
+    /// 不让单个分片打断整个下载。
     /// </summary>
     private void DecryptChacha20Segment(DownloadResult result, MediaSegment segment, byte[] keyBytes)
     {
@@ -221,10 +226,19 @@ internal partial class SimpleDownloadManager
             return;
         }
 
+        var customIv = DownloaderConfig.MyOptions.CustomHLSIv;
         var nonce = segment.EncryptInfo.IV;
+        // 有效的腾讯 nonce 是 8/12 字节；32 字节 = EXT-X-KEY 缺 IV 时的
+        // 段序号派生 fallback（对 CHACHA20 无意义），回落命令行注入值
+        if ((nonce == null || (nonce.Length != 8 && nonce.Length != 12))
+            && customIv is { Length: 8 or 12 })
+        {
+            nonce = customIv;
+        }
         if (nonce == null || (nonce.Length != 8 && nonce.Length != 12))
         {
-            throw new InvalidDataException($"CHACHA20 segment has invalid nonce: {Path.GetFileName(enc)}");
+            Logger.WarnMarkUp($"[yellow]CHACHA20 segment has no valid nonce (len={nonce?.Length.ToString() ?? "null"}), skip decryption: {Path.GetFileName(enc).EscapeMarkup()}[/]");
+            return;
         }
 
         try
@@ -235,10 +249,11 @@ internal partial class SimpleDownloadManager
             result.ActualFilePath = dec;
             result.ActualContentLength = new FileInfo(dec).Length;
         }
-        catch
+        catch (Exception ex)
         {
             if (File.Exists(dec)) File.Delete(dec);
-            throw;
+            Logger.ErrorMarkUp($"[red]CHACHA20 segment decryption failed: {Path.GetFileName(enc).EscapeMarkup()}: {ex.Message}[/]");
+            return;
         }
 
         try
