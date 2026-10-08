@@ -96,6 +96,19 @@ public class WebVttSubTests
         Assert.Equal(TimeSpan.FromSeconds(0), sub.Cues[0].EndTime);
     }
 
+    [Theory]
+    [InlineData(45000, 500)]
+    [InlineData(180180, 2002)]
+    public void AddCuesFromOne_KeepsFractionalTimestampOffset(long timestamp, int milliseconds)
+    {
+        var first = WebVttSub.Parse("WEBVTT\n\n00:00:00.000 --> 00:00:00.100\nFirst\n");
+        var second = WebVttSub.Parse("WEBVTT\n\n00:00:00.000 --> 00:00:00.200\nSecond\n");
+        second.MpegtsTimestamp = timestamp;
+        first.AddCuesFromOne(second);
+        Assert.Equal(TimeSpan.FromMilliseconds(milliseconds), first.Cues[1].StartTime);
+        Assert.Equal(TimeSpan.FromMilliseconds(milliseconds + 200), first.Cues[1].EndTime);
+    }
+
     [Fact]
     public void AddCuesFromOne_CombinesCorrectly()
     {
@@ -107,5 +120,26 @@ public class WebVttSubTests
         Assert.Equal(2, sub1.Cues.Count);
         Assert.Equal("First", sub1.Cues[0].Payload);
         Assert.Equal("Second", sub1.Cues[1].Payload);
+    }
+
+    [Theory]
+    [InlineData("742:20:24.094", 2672424094L)]
+    [InlineData("766:21:38.142", 2758898142L)]
+    [InlineData("01:02.125", 62125L)]
+    [InlineData("00:00:02,002", 2002L)]
+    [InlineData("17.25s", 17250L)]
+    public void ParseTimestampSupportsAccumulatedHours(string text, long milliseconds)
+    {
+        Assert.Equal(TimeSpan.FromTicks(milliseconds * TimeSpan.TicksPerMillisecond), WebVttSub.ParseTimestamp(text));
+    }
+
+    [Fact]
+    public void AccumulatedHoursSurviveVttAndSrtRoundTrip()
+    {
+        var sub = WebVttSub.Parse("WEBVTT\n\n766:21:38.142 --> 766:21:44.148\ncue\n");
+        Assert.Contains("766:21:38.142 --> 766:21:44.148", sub.ToVtt());
+        Assert.Contains("766:21:38,142 --> 766:21:44,148", sub.ToSrt());
+        Assert.Equal(sub.Cues[0].StartTime, WebVttSub.Parse(sub.ToVtt()).Cues[0].StartTime);
+        Assert.Equal(sub.Cues[0].EndTime, WebVttSub.Parse("WEBVTT\n\n" + sub.ToSrt()).Cues[0].EndTime);
     }
 }

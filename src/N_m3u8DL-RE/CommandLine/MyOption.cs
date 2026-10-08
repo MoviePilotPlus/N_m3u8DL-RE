@@ -8,6 +8,9 @@ namespace N_m3u8DL_RE.CommandLine;
 
 internal class MyOption
 {
+    // 分段下载会自动调整合并/解密选项，使用副本避免污染其它段和并发轨道。
+    internal MyOption Clone() => (MyOption)MemberwiseClone();
+
     /// <summary>
     /// See: <see cref="CommandInvoker.Input"/>.
     /// </summary>
@@ -16,10 +19,15 @@ internal class MyOption
     /// See: <see cref="CommandInvoker.Headers"/>.
     /// </summary>
     public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string>();
+    public string? Cookies { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.AdKeywords"/>.
     /// </summary>
     public string[]? AdKeywords { get; set; }
+    // null 自动判断；true 强制显示；false 关闭点播选段交互。
+    public bool? VodSelectParts { get; set; }
+    public bool VodListParts { get; set; }
+    public string? VodDropParts { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.MaxSpeed"/>.
     /// </summary>
@@ -92,6 +100,8 @@ internal class MyOption
     /// See: <see cref="CommandInvoker.HttpRequestTimeout"/>.
     /// </summary>
     public double HttpRequestTimeout { get; set; }
+    // 保留参数来源，直播录制仅在未手动设置时启用自动超时。
+    public bool HttpRequestTimeoutSpecified { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.LiveRecordLimit"/>.
     /// </summary>
@@ -120,6 +130,13 @@ internal class MyOption
     /// See: <see cref="CommandInvoker.UseFFmpegConcatDemuxer"/>.
     /// </summary>
     public bool UseFFmpegConcatDemuxer { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.FFmpegConcatMode"/>.
+    /// </summary>
+    public FFmpegConcatMode FFmpegConcatMode { get; set; }
+    // 旧布尔参数仍可选择文件列表模式，统一得到实际使用的合并方式。
+    internal FFmpegConcatMode EffectiveConcatMode => UseFFmpegConcatDemuxer
+        ? Enum.FFmpegConcatMode.DEMUXER : FFmpegConcatMode;
     /// <summary>
     /// See: <see cref="CommandInvoker.DelAfterDone"/>.
     /// </summary>
@@ -269,9 +286,17 @@ internal class MyOption
     /// </summary>
     public byte[]? CustomHLSIv { get; set; }
     /// <summary>
+    /// See: <see cref="CommandInvoker.CustomHLSScope"/>.
+    /// </summary>
+    public CustomHlsScope CustomHLSScope { get; set; } = CustomHlsScope.ALL;
+    /// <summary>
     /// See: <see cref="CommandInvoker.CustomProxy"/>.
     /// </summary>
     public WebProxy? CustomProxy { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.NetworkInterface"/>.
+    /// </summary>
+    public string? NetworkInterface { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.CustomRange"/>.
     /// </summary>
@@ -280,6 +305,10 @@ internal class MyOption
     /// See: <see cref="CommandInvoker.LiveWaitTime"/>.
     /// </summary>
     public int? LiveWaitTime { get; set; }
+    /// <summary>
+    /// See: <see cref="CommandInvoker.LiveIdleTimeout"/>.
+    /// </summary>
+    public int? LiveIdleTimeout { get; set; }
     /// <summary>
     /// See: <see cref="CommandInvoker.LiveTakeCount"/>.
     /// </summary>

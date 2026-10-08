@@ -10,9 +10,10 @@ using N_m3u8DL_RE.Common.Enum;
 
 namespace N_m3u8DL_RE.Parser;
 
-public class StreamExtractor
+public class StreamExtractor : IDisposable
 {
     public ExtractorType ExtractorType => Extractor.ExtractorType;
+    public WebSourceResult? DirectSource { get; private set; }
     private IExtractor? extractor;
     private ParserConfig parserConfig = new();
     private string rawText = string.Empty;
@@ -29,6 +30,8 @@ public class StreamExtractor
 
     public async Task LoadSourceFromUrlAsync(string url)
     {
+        DirectSource?.Dispose();
+        DirectSource = null;
         Logger.Info(ResString.loadingUrl + url);
         if (url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
         {
@@ -39,7 +42,22 @@ public class StreamExtractor
         else if (url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
             parserConfig.OriginalUrl = url;
-            (this.rawText, url) = await HTTPUtil.GetWebSourceAndNewUrlAsync(url, parserConfig.Headers);
+            var result = await HTTPUtil.GetWebSourceResultAsync(url, parserConfig.Headers);
+            this.rawText = result.Source;
+            if (this.rawText == ResString.ReLiveTs && result.Response?.Content.Headers.ContentLength is not null)
+            {
+                this.rawText = ResString.ReBinaryData;
+            }
+            url = result.Url;
+            if ((this.rawText == ResString.ReBinaryData || this.rawText == ResString.ReLiveTs) &&
+                result.Response != null)
+            {
+                DirectSource = result;
+            }
+            else
+            {
+                result.Dispose();
+            }
             parserConfig.Url = url;
         }
         else if (File.Exists(url))
@@ -96,7 +114,7 @@ public class StreamExtractor
         else if (rawText == ResString.ReBinaryData)
         {
             Logger.InfoMarkUp(ResString.matchBinaryData);
-            throw new NotSupportedException(ResString.notSupported);
+            extractor = new BinaryExtractor(parserConfig);
         }
         else
         {
@@ -105,6 +123,8 @@ public class StreamExtractor
 
         RawFiles[$"raw.{rawType}"] = rawText;
     }
+
+    public void Dispose() => DirectSource?.Dispose();
 
     /// <summary>
     /// 开始解析流媒体信息
@@ -142,16 +162,13 @@ public class StreamExtractor
         }
     }
 
-    public async Task RefreshPlayListAsync(List<StreamSpec> streamSpecs)
+    public async Task RefreshPlayListAsync(List<StreamSpec> streamSpecs, CancellationToken cancellationToken = default, TimeSpan? requestTimeout = null)
     {
+        await semaphore.WaitAsync(cancellationToken);
         try
         {
-            await semaphore.WaitAsync();
-            await RetryUtil.WebRequestRetryAsync(async () =>
-            {
-                await Extractor.RefreshPlayListAsync(streamSpecs);
-                return true;
-            }, retryDelayMilliseconds: 1000, maxRetries: 5);
+            // 直播录制器负责持续重试和停止条件；这里保留原异常，避免网络故障被包装后无法识别。
+            await Extractor.RefreshPlayListAsync(streamSpecs, cancellationToken, requestTimeout);
         }
         finally
         {

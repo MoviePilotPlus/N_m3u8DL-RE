@@ -7,6 +7,8 @@
 * https://livesim.dashif.org/dash/vod/testpic_2s/multi_subs.mpd (ttml + mp4)
 * http://media.axprod.net/TestVectors/v6-Clear/Manifest_1080p.mpd (vtt + mp4)
 * https://storage.googleapis.com/shaka-demo-assets/angel-one-hls/hls.m3u8 (HLS vtt)
+* https://ott.dolby.com/webapi/testasset_dashjs/multiAudio.mpd (DASH Label、多音轨、Accessibility 口述影像)
+* https://rdmedia.bbc.co.uk/testcard/vod/manifests/avc-full.mpd (DASH 多语言、多 Role、TVA 口述影像)
 * https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_adv_example_hevc/master.m3u8 (高级HLS fMP4+VTT)
 * https://events-delivery.apple.com/0205eyyhwbbqexozkwmgccegwnjyrktg/m3u8/vod_index-dpyfrsVksFWjneFiptbXnAMYBtGYbXeZ.m3u8 (高级HLS fMP4+VTT)
 * http://playready.directtaps.net/smoothstreaming/SSWSS720H264/SuperSpeedway_720.ism/Manifest
@@ -16,3 +18,9 @@
 * https://cdn01.vdocipher.com/media/6YI1GS6X5lAr7/b4550743/stream.mpd (单mp4链接 无法使用Bytes: 0-)
 * https://api-proxad.dc2.oqee.net/playlist/v1/live/1776/1/live.mpd （需要从MPD中提取KID）
 * https://media.axprod.net/TestVectors/v7-MultiDRM-SingleKey/Manifest_1080p_ClearKey.mpd (`9eb4050de44b4802932e27d75083e266:166634c675823c235a4a9446fad52e4d`)
+* https://storage.googleapis.com/shaka-demo-assets/heliocentrism/heliocentrism.mpd (DASH 多 Period、PTO、分辨率变化)
+* https://media.axprod.net/TestVectors/v7-Clear/Manifest_MultiPeriod.mpd (DASH 多 Period，无 Period ID、MP4 WVTT 字幕)
+* https://storage.googleapis.com/shaka-demo-assets/sintel-mixed-encryption/clear-enc-clear.mpd (DASH 明文/加密/明文 Period)
+* https://downloads.a2d.tv/synctest/multivariant.m3u8 (HLS 多 MAP、discontinuity、广告、原始 VTT 字幕)
+* https://masterpl.hls.nhkworld.jp/hls/w/202922320260226001/master.m3u8 (NHK WORLD 点播、fMP4、多语言 VTT)
+* https://masterpl.hls.nhkworld.jp/hls/w/live/smarttv.m3u8 (NHK WORLD 直播、fMP4、累计小时 VTT)

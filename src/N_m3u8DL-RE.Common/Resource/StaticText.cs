@@ -4,6 +4,42 @@ internal static class StaticText
 {
     public static readonly Dictionary<string, TextContainer> LANG_DIC = new()
     {
+        ["cmd_config"] = new TextContainer
+        (
+            zhCN: "读取指定配置文件，替代用户默认配置；命令行选项优先",
+            zhTW: "讀取指定設定檔，取代使用者預設設定；命令列選項優先",
+            enUS: "Read a configuration file instead of the user default; command-line options take precedence"
+        ),
+        ["cmd_noConfig"] = new TextContainer
+        (
+            zhCN: "不读取配置文件，不能与 --config 同时使用",
+            zhTW: "不讀取設定檔，不能與 --config 同時使用",
+            enUS: "Disable configuration loading; cannot be combined with --config"
+        ),
+        ["configFileLoadFailed"] = new TextContainer
+        (
+            zhCN: "配置文件加载失败",
+            zhTW: "設定檔載入失敗",
+            enUS: "Failed to load configuration"
+        ),
+        ["configFileConflict"] = new TextContainer
+        (
+            zhCN: "--config 与 --no-config 不能同时使用",
+            zhTW: "--config 與 --no-config 不能同時使用",
+            enUS: "--config and --no-config cannot be used together"
+        ),
+        ["configFileOptionsOnly"] = new TextContainer
+        (
+            zhCN: "配置文件只能包含下载选项，不能包含下载地址、--config、--no-config、帮助、版本或补全操作",
+            zhTW: "設定檔只能包含下載選項，不能包含下載網址、--config、--no-config、說明、版本或補全操作",
+            enUS: "Configuration files may only contain download options, not input URLs, --config, --no-config, help, version or completion actions"
+        ),
+        ["responseFileRecursion"] = new TextContainer
+        (
+            zhCN: "参数文件存在循环引用或嵌套层数过多",
+            zhTW: "參數檔案存在循環引用或巢狀層數過多",
+            enUS: "Response files contain a reference cycle or are nested too deeply"
+        ),
         ["singleFileSplitWarn"] = new TextContainer
         (
             zhCN: "整段文件已被自动切割为小分片以加速下载",
@@ -168,15 +204,15 @@ internal static class StaticText
         ),
         ["cmd_allowHlsMultiExtMap"] = new TextContainer
         (
-            zhCN: "允许HLS中的多个#EXT-X-MAP(实验性)",
-            zhTW: "允許HLS中的多個#EXT-X-MAP(實驗性)",
-            enUS: "Allow multiple #EXT-X-MAP in HLS (experimental)"
+            zhCN: "允许直播HLS中的多个#EXT-X-MAP(实验性；点播默认支持)",
+            zhTW: "允許直播HLS中的多個#EXT-X-MAP(實驗性；點播預設支援)",
+            enUS: "Allow multiple #EXT-X-MAP in live HLS (experimental; enabled for VOD)"
         ),
         ["cmd_appendUrlParams"] = new TextContainer
         (
-            zhCN: "将输入Url的Params添加至分片, 对某些网站很有用, 例如 kakao.com",
-            zhTW: "將輸入Url的Params添加至分片, 對某些網站很有用, 例如 kakao.com",
-            enUS: "Add Params of input Url to segments, useful for some websites, such as kakao.com"
+            zhCN: "将输入URL的查询参数添加至分片；本地清单使用 --base-url 的参数",
+            zhTW: "將輸入URL的查詢參數添加至分片；本地清單使用 --base-url 的參數",
+            enUS: "Append input URL query parameters to segments; local manifests use --base-url parameters"
         ),
         ["cmd_autoSelect"] = new TextContainer
         (
@@ -196,11 +232,29 @@ internal static class StaticText
             zhTW: "二進位制合併",
             enUS: "Binary merge"
         ),
+        ["cmd_ffmpegConcatMode"] = new TextContainer
+        (
+            zhCN: "FFmpeg 合并输入方式：LOCAL_HTTP 本机虚拟输入(默认)，PROTOCOL 直接打开全部分片，DEMUXER 使用文件列表",
+            zhTW: "FFmpeg 合併輸入方式：LOCAL_HTTP 本機虛擬輸入(預設)，PROTOCOL 直接開啟全部分片，DEMUXER 使用檔案清單",
+            enUS: "FFmpeg merge input: LOCAL_HTTP local virtual input (default), PROTOCOL opens all segments directly, DEMUXER uses a file list"
+        ),
+        ["ffmpegConcatInputFailed"] = new TextContainer
+        (
+            zhCN: "本机合并输入失败：{0}。已下载的分片保留，可使用 --ffmpeg-concat-mode PROTOCOL 回退到直接打开分片的 concat 协议。",
+            zhTW: "本機合併輸入失敗：{0}。已下載的分片保留，可使用 --ffmpeg-concat-mode PROTOCOL 回退至直接開啟分片的 concat 協議。",
+            enUS: "Local merge input failed: {0}. Downloaded segments are preserved; use --ffmpeg-concat-mode PROTOCOL to fall back to opening segments directly with the concat protocol."
+        ),
+        ["concatInputLengthChanged"] = new TextContainer
+        (
+            zhCN: "合并期间分片长度发生变化",
+            zhTW: "合併期間分片長度發生變化",
+            enUS: "A segment's length changed during merging"
+        ),
         ["cmd_useFFmpegConcatDemuxer"] = new TextContainer
         (
-            zhCN: "使用 ffmpeg 合并时，使用 concat 分离器而非 concat 协议",
-            zhTW: "使用 ffmpeg 合併時，使用 concat 分離器而非 concat 協議",
-            enUS: "When merging with ffmpeg, use the concat demuxer instead of the concat protocol"
+            zhCN: "使用 concat 分离器合并，等同于 --ffmpeg-concat-mode DEMUXER；同一层同时指定时优先",
+            zhTW: "使用 concat 分離器合併，等同於 --ffmpeg-concat-mode DEMUXER；同一層同時指定時優先",
+            enUS: "Merge with the concat demuxer; equivalent to --ffmpeg-concat-mode DEMUXER, taking precedence when both are supplied at the same level"
         ),
         ["cmd_checkSegmentsCount"] = new TextContainer
         (
@@ -210,15 +264,15 @@ internal static class StaticText
         ),
         ["cmd_downloadRetryCount"] = new TextContainer
         (
-            zhCN: "每个分片下载异常时的重试次数",
-            zhTW: "每個分片下載異常時的重試次數",
-            enUS: "The number of retries when download segment error"
+            zhCN: "每个分片下载异常时的重试次数；分片直播临时网络故障在重试耗尽后仍会等待恢复",
+            zhTW: "每個分片下載異常時的重試次數；分片直播暫時網路故障在重試耗盡後仍會等待恢復",
+            enUS: "Retries per segment; segmented live recording keeps waiting for recovery after transient network failures"
         ),
         ["cmd_httpRequestTimeout"] = new TextContainer
         (
-            zhCN: "HTTP请求的超时时间(秒)",
-            zhTW: "HTTP請求的超時時間(秒)",
-            enUS: "Timeout duration for HTTP requests (in seconds)"
+            zhCN: "HTTP请求超时(秒)；分片直播未指定时自动调整，指定后也用于分片连续无数据超时，不限制总下载时长",
+            zhTW: "HTTP請求逾時(秒)；分片直播未指定時自動調整，指定後也用於分片連續無資料逾時，不限制總下載時長",
+            enUS: "HTTP timeout in seconds; segmented live recording adjusts automatically unless specified, also bounds segment read stalls, not total download time"
         ),
         ["cmd_decryptionBinaryPath"] = new TextContainer
         (
@@ -255,6 +309,30 @@ internal static class StaticText
             zhCN: "为HTTP请求设置特定的请求头, 例如:\r\n-H \"Cookie: mycookie\" -H \"User-Agent: iOS\"",
             zhTW: "為HTTP請求設置特定的請求頭, 例如:\r\n-H \"Cookie: mycookie\" -H \"User-Agent: iOS\"",
             enUS: "Pass custom header(s) to server, Example:\r\n-H \"Cookie: mycookie\" -H \"User-Agent: iOS\""
+        ),
+        ["cmd_cookies"] = new TextContainer
+        (
+            zhCN: "读取 Netscape 格式的 Cookie 文件；手动设置的 Cookie 请求头优先",
+            zhTW: "讀取 Netscape 格式的 Cookie 檔案；手動設定的 Cookie 請求標頭優先",
+            enUS: "Load cookies from a Netscape cookie file; a custom Cookie header takes precedence"
+        ),
+        ["cookiesFileReadFailed"] = new TextContainer
+        (
+            zhCN: "无法读取 Cookie 文件",
+            zhTW: "無法讀取 Cookie 檔案",
+            enUS: "Unable to read cookie file"
+        ),
+        ["cookiesFileInvalidLine"] = new TextContainer
+        (
+            zhCN: "Cookie 文件第 {0} 行格式无效（需要 Netscape 格式）",
+            zhTW: "Cookie 檔案第 {0} 行格式無效（需要 Netscape 格式）",
+            enUS: "Invalid cookie file format at line {0} (Netscape format required)"
+        ),
+        ["cookiesFileSkippedLine"] = new TextContainer
+        (
+            zhCN: "已跳过 Cookie 文件第 {0} 行：名称或值无法用于请求头",
+            zhTW: "已略過 Cookie 檔案第 {0} 行：名稱或值無法用於請求標頭",
+            enUS: "Skipped cookie file line {0}: name or value cannot be sent in a request header"
         ),
         ["cmd_Input"] = new TextContainer
         (
@@ -306,21 +384,78 @@ internal static class StaticText
         ),
         ["cmd_savePattern"] = new TextContainer
         (
-            zhCN: "设置保存文件命名模板, 支持使用变量: \n" +
-                  "<SaveName>, <Id>, <Codecs>, <Language>, <Resolution>, \n" +
-                  "<Bandwidth>, <MediaType>, <Channels>, <FrameRate>, \n" +
-                  "<VideoRange>, <GroupId>, <Ext>\n" +
-                  "示例: --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>\"",
-            zhTW: "設置保存檔案命名模板, 支持使用變數: \n" +
-                  "<SaveName>, <Id>, <Codecs>, <Language>, <Resolution>, \n" +
-                  "<Bandwidth>, <MediaType>, <Channels>, <FrameRate>, \n" +
-                  "<VideoRange>, <GroupId>, <Ext>\n" +
-                  "示例: --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>\"",
-            enUS: "Set output filename pattern with variables: \n" +
-                  "<SaveName>, <Id>, <Codecs>, <Language>, <Resolution>, \n" +
-                  "<Bandwidth>, <MediaType>, <Channels>, <FrameRate>, \n" +
-                  "<VideoRange>, <GroupId>, <Ext>\n" +
-                  "Example: --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>\""
+            zhCN: "设置保存文件命名模板. 输入 \"--morehelp save-pattern\" 以查看变量和示例",
+            zhTW: "設置保存檔案命名模板. 輸入 \"--morehelp save-pattern\" 以查看變數和範例",
+            enUS: "Set output filename pattern. Use \"--morehelp save-pattern\" for variables and examples"
+        ),
+        ["cmd_savePattern_more"] = new TextContainer
+        (
+            zhCN: "使用变量设置各轨道的输出文件名主体，程序自动追加输出扩展名.\r\n\r\n" +
+                  "* <SaveName>: --save-name 指定的保存名称，未指定时为空\r\n" +
+                  "* <Id>: 轨道下载任务ID\r\n" +
+                  "* <Codecs>: 编码信息 (如 avc1.64001f, mp4a.40.2)\r\n" +
+                  "* <Language>: 语言代码 (如 en, zh-CN)\r\n" +
+                  "* <Resolution>: 视频分辨率 (如 1920x1080)\r\n" +
+                  "* <Bandwidth>: 码率数值，单位 bit/s (如 5000000)\r\n" +
+                  "* <MediaType>: 媒体类型 (VIDEO, AUDIO, SUBTITLES)\r\n" +
+                  "* <Channels>: 音频声道信息\r\n" +
+                  "* <FrameRate>: 视频帧率\r\n" +
+                  "* <VideoRange>: 视频动态范围 (如 SDR, HDR10)\r\n" +
+                  "* <GroupId>: 流组标识符\r\n\r\n" +
+                  "变量区分大小写，缺失的信息替换为空字符串. 模板不需要包含扩展名.\r\n\r\n" +
+                  "例如:\r\n" +
+                  "# 按分辨率命名视频\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>\"\r\n" +
+                  "# 加入码率 (bit/s)\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>bps\"\r\n" +
+                  "# 按语言和声道命名音轨\r\n" +
+                  "--save-name audio --save-pattern \"<SaveName>_<Language>_<Channels>\"\r\n" +
+                  "# 用任务ID区分多个配置相同的轨道\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Id>_<Codecs>\"\r\n",
+            zhTW: "使用變數設置各軌道的輸出檔案名稱主體，程式自動附加輸出副檔名.\r\n\r\n" +
+                  "* <SaveName>: --save-name 指定的保存名稱，未指定時為空\r\n" +
+                  "* <Id>: 軌道下載任務ID\r\n" +
+                  "* <Codecs>: 編碼資訊 (如 avc1.64001f, mp4a.40.2)\r\n" +
+                  "* <Language>: 語言代碼 (如 en, zh-CN)\r\n" +
+                  "* <Resolution>: 影片解析度 (如 1920x1080)\r\n" +
+                  "* <Bandwidth>: 碼率數值，單位 bit/s (如 5000000)\r\n" +
+                  "* <MediaType>: 媒體類型 (VIDEO, AUDIO, SUBTITLES)\r\n" +
+                  "* <Channels>: 音訊聲道資訊\r\n" +
+                  "* <FrameRate>: 影片影格率\r\n" +
+                  "* <VideoRange>: 影片動態範圍 (如 SDR, HDR10)\r\n" +
+                  "* <GroupId>: 串流群組識別碼\r\n\r\n" +
+                  "變數區分大小寫，缺失的資訊替換為空字串. 模板不需要包含副檔名.\r\n\r\n" +
+                  "例如:\r\n" +
+                  "# 按解析度命名影片\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>\"\r\n" +
+                  "# 加入碼率 (bit/s)\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>bps\"\r\n" +
+                  "# 按語言和聲道命名音軌\r\n" +
+                  "--save-name audio --save-pattern \"<SaveName>_<Language>_<Channels>\"\r\n" +
+                  "# 用任務ID區分多個配置相同的軌道\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Id>_<Codecs>\"\r\n",
+            enUS: "Set each track's output filename stem using variables. The output extension is appended automatically.\r\n\r\n" +
+                  "* <SaveName>: name specified by --save-name, or empty when omitted\r\n" +
+                  "* <Id>: track download task ID\r\n" +
+                  "* <Codecs>: codec information (e.g. avc1.64001f, mp4a.40.2)\r\n" +
+                  "* <Language>: language code (e.g. en, zh-CN)\r\n" +
+                  "* <Resolution>: video resolution (e.g. 1920x1080)\r\n" +
+                  "* <Bandwidth>: bitrate value in bit/s (e.g. 5000000)\r\n" +
+                  "* <MediaType>: media type (VIDEO, AUDIO, SUBTITLES)\r\n" +
+                  "* <Channels>: audio channel information\r\n" +
+                  "* <FrameRate>: video frame rate\r\n" +
+                  "* <VideoRange>: video dynamic range (e.g. SDR, HDR10)\r\n" +
+                  "* <GroupId>: stream group identifier\r\n\r\n" +
+                  "Variables are case-sensitive. Missing values become empty strings. Do not include the output extension in the pattern.\r\n\r\n" +
+                  "Examples:\r\n" +
+                  "# Name video tracks by resolution\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>\"\r\n" +
+                  "# Include bitrate (bit/s)\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Resolution>_<Bandwidth>bps\"\r\n" +
+                  "# Name audio tracks by language and channels\r\n" +
+                  "--save-name audio --save-pattern \"<SaveName>_<Language>_<Channels>\"\r\n" +
+                  "# Use task IDs to distinguish tracks with the same configuration\r\n" +
+                  "--save-name video --save-pattern \"<SaveName>_<Id>_<Codecs>\"\r\n"
         ),
         ["cmd_logFilePath"] = new TextContainer
         (
@@ -382,6 +517,18 @@ internal static class StaticText
             zhTW: "查看某個選項的詳細幫助訊息",
             enUS: "Set more help info about one option"
         ),
+        ["cmd_generateCompletion"] = new TextContainer
+        (
+            zhCN: "输出内嵌的补全脚本（powershell）",
+            zhTW: "輸出內嵌的補全腳本（powershell）",
+            enUS: "Print the embedded completion script (powershell)"
+        ),
+        ["completionShellInvalid"] = new TextContainer
+        (
+            zhCN: "--generate-completion 需要指定支持的 Shell: powershell",
+            zhTW: "--generate-completion 需要指定支援的 Shell: powershell",
+            enUS: "--generate-completion requires a supported shell: powershell"
+        ),
         ["cmd_urlProcessorArgs"] = new TextContainer
         (
             zhCN: "此字符串将直接传递给URL Processor",
@@ -393,6 +540,36 @@ internal static class StaticText
             zhCN: "录制直播时实时合并",
             zhTW: "錄製直播時即時合併",
             enUS: "Real-time merge into file when recording live"
+        ),
+        ["cmd_networkInterface"] = new TextContainer
+        (
+            zhCN: "指定请求使用的网卡名或本机 IP，如 eth1 或 192.168.1.10",
+            zhTW: "指定請求使用的網卡名稱或本機 IP，如 eth1 或 192.168.1.10",
+            enUS: "Use the specified network interface or local IP address, e.g. eth1 or 192.168.1.10"
+        ),
+        ["networkInterfaceInvalid"] = new TextContainer
+        (
+            zhCN: "找不到可用的网络接口或本机 IP 地址: {0}",
+            zhTW: "找不到可用的網路介面或本機 IP 位址: {0}",
+            enUS: "No usable network interface or local IP address found: {0}"
+        ),
+        ["networkInterfaceUnsupported"] = new TextContainer
+        (
+            zhCN: "当前系统不支持按网卡名绑定，请指定本机 IP 地址",
+            zhTW: "目前系統不支援依網卡名稱綁定，請指定本機 IP 位址",
+            enUS: "Binding by interface name is unsupported on this system; specify a local IP address"
+        ),
+        ["networkInterfaceBindFailed"] = new TextContainer
+        (
+            zhCN: "无法绑定网络接口或本机 IP 地址 {0}: {1}",
+            zhTW: "無法綁定網路介面或本機 IP 位址 {0}: {1}",
+            enUS: "Cannot bind network interface or local IP address {0}: {1}"
+        ),
+        ["networkInterfaceConnectFailed"] = new TextContainer
+        (
+            zhCN: "无法通过指定网络接口或本机 IP 地址 {0} 连接到 {1}",
+            zhTW: "無法透過指定網路介面或本機 IP 位址 {0} 連線至 {1}",
+            enUS: "Cannot connect to {1} using network interface or local IP address {0}"
         ),
         ["cmd_customProxy"] = new TextContainer
         (
@@ -424,11 +601,202 @@ internal static class StaticText
             zhTW: "手動設置直播列表刷新間隔",
             enUS: "Manually set the live playlist refresh interval"
         ),
+        ["cmd_liveIdleTimeout"] = new TextContainer
+        (
+            zhCN: "直播列表连续指定秒数无新分片时停止录制（默认关闭）",
+            zhTW: "直播列表連續指定秒數無新分片時停止錄製（預設關閉）",
+            enUS: "Stop recording when a live playlist has no new segments for this many seconds (disabled by default)"
+        ),
         ["cmd_adKeyword"] = new TextContainer
         (
             zhCN: "设置广告分片的URL关键字(正则表达式)",
             zhTW: "設置廣告分片的URL關鍵字(正則表達式)",
             enUS: "Set URL keywords (regular expressions) for AD segments"
+        ),
+        ["vodPartsConcat"] = new TextContainer
+        (
+            zhCN: "正在拼接 {0} 个独立初始化的点播段...",
+            zhTW: "正在拼接 {0} 個獨立初始化的點播段...",
+            enUS: "Concatenating {0} independently initialized VOD sections..."
+        ),
+        ["vodPeriodsPlanned"] = new TextContainer
+        (
+            zhCN: "点播：已为 {1} 规划 {0} 个 Period",
+            zhTW: "點播：已為 {1} 規劃 {0} 個 Period",
+            enUS: "VOD: {0} Periods for {1}"
+        ),
+        ["vodPeriodNoMatch"] = new TextContainer
+        (
+            zhCN: "Period {0}：没有找到与 {1} 匹配的媒体流。",
+            zhTW: "Period {0}：沒有找到與 {1} 匹配的媒體流。",
+            enUS: "Period {0}: no matching representation for {1}."
+        ),
+        ["vodPeriodIncompatible"] = new TextContainer
+        (
+            zhCN: "Period {0}：与 {1} 的编码或声道配置不兼容。请用 --vod-select-parts 选择要保留的配置，或用 --vod-drop-parts 排除不需要的段。",
+            zhTW: "Period {0}：與 {1} 的編碼或聲道配置不相容。請用 --vod-select-parts 選擇要保留的配置，或用 --vod-drop-parts 排除不需要的段。",
+            enUS: "Period {0}: incompatible codec/channel configuration for {1}. Use --vod-select-parts to keep desired configurations, or --vod-drop-parts to exclude unwanted sections."
+        ),
+        ["vodPartsIncompatible"] = new TextContainer
+        (
+            zhCN: "点播段的编码、采样率或声道配置不兼容，已保留各段输出文件。请用 --vod-select-parts 选择要保留的配置，或用 --vod-drop-parts 排除不需要的段。",
+            zhTW: "點播段的編碼、取樣率或聲道配置不相容，已保留各段輸出檔案。請用 --vod-select-parts 選擇要保留的配置，或用 --vod-drop-parts 排除不需要的段。",
+            enUS: "VOD sections have incompatible codec/sample-rate/channel configurations; separate outputs are preserved. Use --vod-select-parts to keep desired configurations, or --vod-drop-parts to exclude unwanted sections."
+        ),
+        ["vodPartStillEncrypted"] = new TextContainer
+        (
+            zhCN: "点播段仍含加密媒体，已停止拼接并保留下载文件。请提供完整的解密密钥后重试。",
+            zhTW: "點播段仍含加密媒體，已停止拼接並保留下載檔案。請提供完整的解密金鑰後重試。",
+            enUS: "A VOD section still contains encrypted media. Concatenation stopped and downloaded files are preserved. Retry with all required decryption keys."
+        ),
+        ["webmInvalid"] = new TextContainer
+        (
+            zhCN: "WebM 元素格式无效。",
+            zhTW: "WebM 元素格式無效。",
+            enUS: "Invalid WebM element."
+        ),
+        ["vodMediaOutsidePeriod"] = new TextContainer
+        (
+            zhCN: "Period {0}：媒体超出该段的播放时间范围。",
+            zhTW: "Period {0}：媒體超出該段的播放時間範圍。",
+            enUS: "Period {0}: media lies outside its presentation interval."
+        ),
+        ["vodDropPartsInvalid"] = new TextContainer
+        (
+            zhCN: "--vod-drop-parts 编号格式无效，请使用 0,2-4 这样的格式。",
+            zhTW: "--vod-drop-parts 編號格式無效，請使用 0,2-4 這樣的格式。",
+            enUS: "Invalid --vod-drop-parts: use IDs such as 0,2-4."
+        ),
+        ["vodDropPartsRangeInvalid"] = new TextContainer
+        (
+            zhCN: "--vod-drop-parts 编号范围无效。",
+            zhTW: "--vod-drop-parts 編號範圍無效。",
+            enUS: "Invalid --vod-drop-parts range."
+        ),
+        ["vodPartIdsUnknown"] = new TextContainer
+        (
+            zhCN: "不存在的点播段编号：{0}。请用 --vod-list-parts 查看编号。",
+            zhTW: "不存在的點播段編號：{0}。請用 --vod-list-parts 查看編號。",
+            enUS: "Unknown VOD part IDs: {0}. Use --vod-list-parts."
+        ),
+        ["vodSelectAtLeastOne"] = new TextContainer
+        (
+            zhCN: "请至少选择一组要保留的点播配置。",
+            zhTW: "請至少選擇一組要保留的點播配置。",
+            enUS: "Select at least one VOD configuration."
+        ),
+        ["vodPartsRequireVod"] = new TextContainer
+        (
+            zhCN: "点播选段选项仅适用于点播清单。",
+            zhTW: "點播選段選項僅適用於點播清單。",
+            enUS: "VOD part selection options require a VOD playlist."
+        ),
+        ["vodPartsRequireInteractive"] = new TextContainer
+        (
+            zhCN: "--vod-select-parts 需要可交互的终端。脚本请使用 --vod-drop-parts。",
+            zhTW: "--vod-select-parts 需要可互動的終端。指令碼請使用 --vod-drop-parts。",
+            enUS: "--vod-select-parts requires an interactive terminal. Use --vod-drop-parts for scripts."
+        ),
+        ["hlsMediaOriginReadFailed"] = new TextContainer
+        (
+            zhCN: "无法读取 HLS 媒体的时间戳起点。",
+            zhTW: "無法讀取 HLS 媒體的時間戳起點。",
+            enUS: "Cannot read HLS media timestamp origin."
+        ),
+        ["hlsSubtitleOriginMissing"] = new TextContainer
+        (
+            zhCN: "无法确定字幕同步所需的 HLS 媒体时间戳起点。",
+            zhTW: "無法確定字幕同步所需的 HLS 媒體時間戳起點。",
+            enUS: "Cannot determine the HLS media timestamp origin for subtitles."
+        ),
+        ["hlsTimestampMapInvalid"] = new TextContainer
+        (
+            zhCN: "HLS X-TIMESTAMP-MAP 格式无效。",
+            zhTW: "HLS X-TIMESTAMP-MAP 格式無效。",
+            enUS: "Invalid HLS X-TIMESTAMP-MAP."
+        ),
+        ["hlsByteRangeMissingPrevious"] = new TextContainer
+        (
+            zhCN: "HLS BYTERANGE 省略偏移时，必须存在前一个字节范围。",
+            zhTW: "HLS BYTERANGE 省略偏移時，必須存在前一個位元組範圍。",
+            enUS: "Implicit HLS BYTERANGE requires a preceding byte range."
+        ),
+        ["hlsInvalidDuration"] = new TextContainer
+        (
+            zhCN: "HLS 分片时长无效，清单中也没有可用于估算的有效时长。",
+            zhTW: "HLS 分片時長無效，清單中也沒有可用於估算的有效時長。",
+            enUS: "Invalid HLS segment duration, with no valid playlist duration available for estimation."
+        ),
+        ["hlsInvalidDurationFallback"] = new TextContainer
+        (
+            zhCN: "检测到异常 HLS 分片时长，已用清单中的有效时长估算；录制时长可能存在偏差。",
+            zhTW: "偵測到異常 HLS 分片時長，已用清單中的有效時長估算；錄製時長可能存在偏差。",
+            enUS: "Invalid HLS segment durations were estimated from valid playlist durations; recording duration may be approximate."
+        ),
+        ["mediaPartInputMismatch"] = new TextContainer
+        (
+            zhCN: "每个媒体段必须对应一个输入文件。",
+            zhTW: "每個媒體段必須對應一個輸入檔案。",
+            enUS: "Each media part must have one input file."
+        ),
+        ["concatInputPathInvalid"] = new TextContainer
+        (
+            zhCN: "拼接输入文件的路径无效。",
+            zhTW: "拼接輸入檔案的路徑無效。",
+            enUS: "Invalid concat input path."
+        ),
+        ["tfdtVersionUnsupported"] = new TextContainer
+        (
+            zhCN: "TFDT 版本只能为 0 或 1。",
+            zhTW: "TFDT 版本只能為 0 或 1。",
+            enUS: "TFDT version can only be 0 or 1."
+        ),
+        ["vodPartIdsLabel"] = new TextContainer
+        (
+            zhCN: "编号",
+            zhTW: "編號",
+            enUS: "IDs"
+        ),
+        ["downloadCancelled"] = new TextContainer
+        (
+            zhCN: "已取消下载。",
+            zhTW: "已取消下載。",
+            enUS: "Download cancelled."
+        ),
+        ["cmd_vodSelectParts"] = new TextContainer
+        (
+            zhCN: "控制点播选段交互：不传则自动判断，true 强制显示，false 关闭（空格勾选，回车确认）",
+            zhTW: "控制點播選段互動：未指定則自動判斷，true 強制顯示，false 關閉（空格勾選，確認鍵完成）",
+            enUS: "Control VOD section selection: omitted = automatic, true = always prompt, false = disable (Space/Enter)"
+        ),
+        ["vodReadingConfigs"] = new TextContainer(zhCN: "正在识别点播媒体配置…", zhTW: "正在識別點播媒體配置…", enUS: "Inspecting VOD media configurations…"),
+        ["vodPromptTitle"] = new TextContainer
+        (
+            zhCN: "请选择[green]要保留的点播段[/]（按配置和时长归组，默认全部保留）：",
+            zhTW: "請選擇[green]要保留的點播段[/]（按配置和時長歸組，預設全部保留）：",
+            enUS: "Select [green]VOD sections to keep[/] (grouped by configuration and duration; all kept by default):"
+        ),
+        ["vodPromptInfo"] = new TextContainer
+        (
+            zhCN: "(按 [blue]空格键[/] 勾选/取消，按 [green]回车键[/] 确认；音视频和字幕同步处理)",
+            zhTW: "(按 [blue]空格鍵[/] 勾選/取消，按 [green]確認鍵[/] 完成；音訊視訊和字幕同步處理)",
+            enUS: "(Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept; audio/video/subtitles stay together)"
+        ),
+        ["vodSectionDuration"] = new TextContainer(zhCN: "每段 {0} 秒", zhTW: "每段 {0} 秒", enUS: "{0} s per section"),
+        ["vodPartCount"] = new TextContainer(zhCN: "{0} 段", zhTW: "{0} 段", enUS: "{0} sections"),
+        ["vodAvailableConfigs"] = new TextContainer(zhCN: "{0} 种可选配置", zhTW: "{0} 種可選配置", enUS: "{0} available configurations"),
+        ["vodConfigUnknown"] = new TextContainer(zhCN: "配置未验证", zhTW: "配置未驗證", enUS: "unverified configuration"),
+        ["cmd_vodListParts"] = new TextContainer
+        (
+            zhCN: "按媒体配置归组列出点播段的编号和总时长后退出",
+            zhTW: "按媒體配置歸組列出點播段的編號和總時長後退出",
+            enUS: "List VOD sections grouped by media configuration, with IDs and total durations, then exit"
+        ),
+        ["cmd_vodDropParts"] = new TextContainer
+        (
+            zhCN: "按 --vod-list-parts 的编号删除整个点播段及对应音频/字幕，例如 0,2-4",
+            zhTW: "按 --vod-list-parts 的編號刪除整個點播段及對應音訊/字幕，例如 0,2-4",
+            enUS: "Drop VOD sections and matching audio/subtitles by --vod-list-parts IDs, e.g. 0,2-4"
         ),
         ["cmd_liveTakeCount"] = new TextContainer
         (
@@ -453,6 +821,12 @@ internal static class StaticText
             zhCN: "指定HLS解密IV. 可以是文件, HEX或Base64",
             zhTW: "指定HLS解密IV. 可以是文件, HEX或Base64",
             enUS: "Set the HLS decryption iv. Can be file, HEX or Base64"
+        ),
+        ["cmd_customHLSScope"] = new TextContainer
+        (
+            zhCN: "指定自定义HLS加密方式、KEY和IV的适用范围 (ALL|VIDEO|AUDIO)",
+            zhTW: "指定自訂HLS加密方式、KEY和IV的適用範圍 (ALL|VIDEO|AUDIO)",
+            enUS: "Apply custom HLS method, key and IV to selected media type (ALL|VIDEO|AUDIO)"
         ),
         ["cmd_livePipeMux"] = new TextContainer
         (
@@ -507,6 +881,12 @@ internal static class StaticText
             zhCN: "设置注释信息",
             zhTW: "設置註釋信息",
             enUS: "Set comment information"
+        ),
+        ["cmd_muxMetadataFile"] = new TextContainer
+        (
+            zhCN: "混流时写入的元数据文件路径(FFMETADATA格式，用于章节信息)",
+            zhTW: "混流時寫入的元數據文件路徑(FFMETADATA格式，用於章節信息)",
+            enUS: "Metadata file (FFMETADATA format) to embed when muxing, used for chapters"
         ),
         ["cmd_skipSubtitleDecrypt"] = new TextContainer
         (
@@ -706,6 +1086,8 @@ internal static class StaticText
         ["cmd_custom_range"] = new TextContainer
         (
             zhCN: "下载点播内容时, 仅下载部分分片.\r\n\r\n" +
+                  "时间格式为 MM:SS 或 HH:MM:SS，省略起点表示从头开始，省略终点表示下载到末尾.\r\n" +
+                  "时间范围按分片起始时间筛选（包含起止边界），保留完整分片，不进行精确裁切.\r\n\r\n" +
                   "例如: \r\n" +
                   "# 下载[0,10]共11个分片\r\n" +
                   "--custom-range 0-10\r\n" +
@@ -714,8 +1096,14 @@ internal static class StaticText
                   "# 下载前100个分片\r\n" +
                   "--custom-range -99\r\n" +
                   "# 下载第5分钟到20分钟的内容\r\n" +
-                  "--custom-range 05:00-20:00\r\n",
+                  "--custom-range 05:00-20:00\r\n" +
+                  "# 跳过前26秒，下载后续内容\r\n" +
+                  "--custom-range 00:26-\r\n" +
+                  "# 仅下载前26秒的内容（可能包含跨越26秒边界的完整分片）\r\n" +
+                  "--custom-range -00:26\r\n",
             zhTW: "下載點播內容時, 僅下載部分分片.\r\n\r\n" +
+                  "時間格式為 MM:SS 或 HH:MM:SS，省略起點表示從頭開始，省略終點表示下載到末尾.\r\n" +
+                  "時間範圍按分片起始時間篩選（包含起止邊界），保留完整分片，不進行精確裁切.\r\n\r\n" +
                   "例如: \r\n" +
                   "# 下載[0,10]共11個分片\r\n" +
                   "--custom-range 0-10\r\n" +
@@ -724,8 +1112,14 @@ internal static class StaticText
                   "# 下載前100個分片\r\n" +
                   "--custom-range -99\r\n" +
                   "# 下載第5分鐘到20分鐘的內容\r\n" +
-                  "--custom-range 05:00-20:00\r\n",
+                  "--custom-range 05:00-20:00\r\n" +
+                  "# 跳過前26秒，下載後續內容\r\n" +
+                  "--custom-range 00:26-\r\n" +
+                  "# 僅下載前26秒的內容（可能包含跨越26秒邊界的完整分片）\r\n" +
+                  "--custom-range -00:26\r\n",
             enUS: "Download only part of the segments when downloading vod content.\r\n\r\n" +
+                  "Use MM:SS or HH:MM:SS. Omit the start to download from the beginning, or omit the end to download to the end.\r\n" +
+                  "Time ranges select segments by their start times, including both boundaries. Whole segments are retained; no precise trimming is performed.\r\n\r\n" +
                   "Examples: \r\n" +
                   "# Download [0,10], a total of 11 segments\r\n" +
                   "--custom-range 0-10\r\n" +
@@ -734,7 +1128,11 @@ internal static class StaticText
                   "# Download the first 100 segments\r\n" +
                   "--custom-range -99\r\n" +
                   "# Download content from the 05:00 to 20:00\r\n" +
-                  "--custom-range 05:00-20:00\r\n"
+                  "--custom-range 05:00-20:00\r\n" +
+                  "# Skip the first 26 seconds and download the remaining content\r\n" +
+                  "--custom-range 00:26-\r\n" +
+                  "# Download only the first 26 seconds (whole segments may extend beyond 26 seconds)\r\n" +
+                  "--custom-range -00:26\r\n"
         ),
         ["cmd_selectSubtitle_more"] = new TextContainer
         (
@@ -871,6 +1269,48 @@ internal static class StaticText
             zhTW: "直播已結束，即將停止錄製",
             enUS: "Live stream ended, will stop recording soon"
         ),
+        ["liveIdleTimeoutReached"] = new TextContainer
+        (
+            zhCN: "连续 {0} 秒没有新分片，即将停止录制",
+            zhTW: "連續 {0} 秒沒有新分片，即將停止錄製",
+            enUS: "No new segments for {0} seconds, stopping live recording"
+        ),
+        ["liveNetworkRetry"] = new TextContainer
+        (
+            zhCN: "直播请求暂时失败，等待网络恢复后重试...",
+            zhTW: "直播請求暫時失敗，等待網路恢復後重試...",
+            enUS: "Live request temporarily failed, waiting to retry..."
+        ),
+        ["liveNetworkRecovered"] = new TextContainer
+        (
+            zhCN: "直播请求已恢复，继续录制",
+            zhTW: "直播請求已恢復，繼續錄製",
+            enUS: "Live request recovered, continuing recording"
+        ),
+        ["liveNetworkTimeout"] = new TextContainer
+        (
+            zhCN: "直播请求等待超时",
+            zhTW: "直播請求等待逾時",
+            enUS: "Live request timed out"
+        ),
+        ["liveSegmentUnavailable"] = new TextContainer
+        (
+            zhCN: "无法获取直播分片，跳过并继续录制；录制结果将标记为不完整",
+            zhTW: "無法取得直播分片，跳過並繼續錄製；錄製結果將標記為不完整",
+            enUS: "Unable to retrieve live segment, skipping it; the recording will be marked incomplete"
+        ),
+        ["liveSegmentNotReady"] = new TextContainer
+        (
+            zhCN: "直播分片暂时不可用，稍后重试...",
+            zhTW: "直播分片暫時無法取得，稍後重試...",
+            enUS: "Live segment is temporarily unavailable, retrying shortly..."
+        ),
+        ["httpTooManyRedirects"] = new TextContainer
+        (
+            zhCN: "HTTP重定向次数过多，请检查资源URL",
+            zhTW: "HTTP重新導向次數過多，請檢查資源URL",
+            enUS: "Too many HTTP redirects, please check the resource URL"
+        ),
         ["saveName"] = new TextContainer
         (
             zhCN: "保存文件名: ",
@@ -891,9 +1331,9 @@ internal static class StaticText
         ),
         ["ffmpegMergeReachLimit"] = new TextContainer
         (
-            zhCN: "合并失败：打开的文件过多(Too many open files)。已下载的分片仍保留在临时目录，可提高系统文件句柄上限(如 ulimit -n)后重试，或改用 --binary-merge / --use-ffmpeg-concat-demuxer 重新合并。",
-            zhTW: "合併失敗：開啟的檔案過多(Too many open files)。已下載的分片仍保留在臨時目錄，可提高系統檔案句柄上限(如 ulimit -n)後重試，或改用 --binary-merge / --use-ffmpeg-concat-demuxer 重新合併。",
-            enUS: "Merge failed: too many open files. The downloaded segments are kept in the temp directory; raise the open-file limit (e.g. ulimit -n) and retry, or re-merge with --binary-merge / --use-ffmpeg-concat-demuxer."
+            zhCN: "合并失败：打开的文件过多(Too many open files)。已下载的分片仍保留在临时目录，可改用 --ffmpeg-concat-mode LOCAL_HTTP，或提高系统文件句柄上限(如 ulimit -n)后重试。",
+            zhTW: "合併失敗：開啟的檔案過多(Too many open files)。已下載的分片仍保留在臨時目錄，可改用 --ffmpeg-concat-mode LOCAL_HTTP，或提高系統檔案句柄上限(如 ulimit -n)後重試。",
+            enUS: "Merge failed: too many open files. The downloaded segments are kept in the temp directory; use --ffmpeg-concat-mode LOCAL_HTTP, or raise the open-file limit (e.g. ulimit -n) and retry."
         ),
         ["ffmpegNotFound"] = new TextContainer
         (

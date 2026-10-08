@@ -9,13 +9,19 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using System.Globalization;
 using System.Net;
+using System.Reflection;
 using System.Text.RegularExpressions;
 
 namespace N_m3u8DL_RE.CommandLine;
 
 internal static partial class CommandInvoker
 {
-    public const string VERSION_INFO = "N_m3u8DL-RE (Beta version) 20260628";
+    private static readonly List<(Symbol Symbol, Func<string> Text)> Descriptions = [];
+
+    private static readonly Assembly AppAssembly = typeof(CommandInvoker).Assembly;
+    private static readonly string AppVersion = AppAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion.Split('+', 2)[0] ?? AppAssembly.GetName().Version?.ToString(3) ?? "unknown";
+    public static readonly string VERSION_INFO = $"N_m3u8DL-RE {AppVersion} 20260628";
 
     [GeneratedRegex("((best|worst)\\d*|all)")]
     private static partial Regex ForStrRegex();
@@ -30,97 +36,114 @@ internal static partial class CommandInvoker
     [GeneratedRegex("^[0-9a-fA-f]{32}$")]
     private static partial Regex SingleHexKeyRegex();
 
-    private static readonly Argument<string> Input = new("input") { Description = ResString.cmd_Input };
-    private static readonly Option<string?> TmpDir = new("--tmp-dir") { Description = ResString.cmd_tmpDir };
-    private static readonly Option<string?> SaveDir = new("--save-dir") { Description = ResString.cmd_saveDir };
-    private static readonly Option<string?> SaveName = new("--save-name") { Description = ResString.cmd_saveName, CustomParser = ParseSaveName};
-    private static readonly Option<string?> SavePattern = new("--save-pattern") { Description = ResString.cmd_savePattern };
-    private static readonly Option<string?> LogFilePath = new("--log-file-path") { Description = ResString.cmd_logFilePath, CustomParser = ParseFilePath};
-    private static readonly Option<string?> UILanguage = new Option<string?>("--ui-language") { Description = ResString.cmd_uiLanguage }.AcceptOnlyFromAmong("en-US", "zh-CN", "zh-TW");
-    private static readonly Option<string?> UrlProcessorArgs = new("--urlprocessor-args") { Description = ResString.cmd_urlProcessorArgs };
-    private static readonly Option<string> KeyTextFile = new("--key-text-file") { Description = ResString.cmd_keyText };
-    private static readonly Option<Dictionary<string, string>> Headers = new("-H", "--header") { HelpName = "header", Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, Description = ResString.cmd_header, CustomParser = ParseHeaders };
-    private static readonly Option<LogLevel> LogLevel = new("--log-level") { Description = ResString.cmd_logLevel, DefaultValueFactory = _ => Common.Log.LogLevel.INFO };
-    private static readonly Option<SubtitleFormat> SubtitleFormat = new("--sub-format") { Description = ResString.cmd_subFormat, DefaultValueFactory = _ => Enum.SubtitleFormat.SRT };
-    private static readonly Option<bool> DisableUpdateCheck = new Option<bool>("--disable-update-check") { Description = ResString.cmd_disableUpdateCheck }.WithDefault(false);
-    private static readonly Option<bool> AutoSelect = new Option<bool>("--auto-select") { Description = ResString.cmd_autoSelect }.WithDefault(false);
-    private static readonly Option<bool> SubOnly = new Option<bool>("--sub-only") { Description = ResString.cmd_subOnly }.WithDefault(false);
-    private static readonly Option<int> ThreadCount = new("--thread-count") { HelpName = "number", Description = ResString.cmd_threadCount, DefaultValueFactory = _ => Environment.ProcessorCount };
-    private static readonly Option<int> DownloadRetryCount = new("--download-retry-count") { HelpName = "number", Description = ResString.cmd_downloadRetryCount, DefaultValueFactory = _ => 3 };
-    private static readonly Option<double> HttpRequestTimeout = new("--http-request-timeout") { HelpName = "seconds", Description = ResString.cmd_httpRequestTimeout, DefaultValueFactory = _ => 100 };
-    private static readonly Option<bool> SkipMerge = new Option<bool>("--skip-merge") { Description = ResString.cmd_skipMerge }.WithDefault(false);
-    private static readonly Option<bool> SkipDownload = new Option<bool>("--skip-download") { Description = ResString.cmd_skipDownload }.WithDefault(false);
-    private static readonly Option<bool> NoDateInfo = new Option<bool>("--no-date-info") { Description = ResString.cmd_noDateInfo }.WithDefault(false);
-    private static readonly Option<string?> CopyrightInfo = new("--copyright-info") { Description = ResString.cmd_copyrightInfo };
-    private static readonly Option<string?> CommnetInfo = new("--commnet-info") { Description = ResString.cmd_commnetInfo };
-    private static readonly Option<string?> MuxMetadataFile = new("--mux-metadata-file") { Description = "混流时写入的元数据文件路径(FFMETADATA格式，用于章节信息)" };
-    private static readonly Option<bool> BinaryMerge = new Option<bool>("--binary-merge") { Description = ResString.cmd_binaryMerge }.WithDefault(false);
-    private static readonly Option<bool> UseFFmpegConcatDemuxer = new Option<bool>("--use-ffmpeg-concat-demuxer") { Description = ResString.cmd_useFFmpegConcatDemuxer }.WithDefault(false);
-    private static readonly Option<bool> DelAfterDone = new Option<bool>("--del-after-done") { Description = ResString.cmd_delAfterDone }.WithDefault(true);
-    private static readonly Option<bool> AutoSubtitleFix = new Option<bool>("--auto-subtitle-fix") { Description = ResString.cmd_subtitleFix }.WithDefault(true);
-    private static readonly Option<bool> CheckSegmentsCount = new Option<bool>("--check-segments-count") { Description = ResString.cmd_checkSegmentsCount }.WithDefault(true);
-    private static readonly Option<bool> WriteMetaJson = new Option<bool>("--write-meta-json") { Description = ResString.cmd_writeMetaJson }.WithDefault(true);
-    private static readonly Option<bool> AppendUrlParams = new Option<bool>("--append-url-params") { Description = ResString.cmd_appendUrlParams }.WithDefault(false);
-    private static readonly Option<bool> MP4RealTimeDecryption = new Option<bool>("--mp4-real-time-decryption") { Description = ResString.cmd_MP4RealTimeDecryption }.WithDefault(false);
-    private static readonly Option<bool> SkipSubtitleDecrypt = new Option<bool>("--skip-subtitle-decrypt") { Description = ResString.cmd_skipSubtitleDecrypt }.WithDefault(true);
-    private static readonly Option<bool> SkipAudioDecrypt = new Option<bool>("--skip-audio-decrypt") { Description = ResString.cmd_skipAudioDecrypt }.WithDefault(true);
-    private static readonly Option<bool> ForceMuxDolby = new Option<bool>("--force-mux-dolby") { Description = ResString.cmd_forceMuxDolby }.WithDefault(true);
-    private static readonly Option<bool> UseShakaPackager = new Option<bool>("--use-shaka-packager") { Hidden = true, Description = ResString.cmd_useShakaPackager }.WithDefault(false);
-    private static readonly Option<DecryptEngine> DecryptionEngine = new ("--decryption-engine") { Description = ResString.cmd_decryptionEngine, DefaultValueFactory = _ => DecryptEngine.AUTO };
-    private static readonly Option<bool> ForceAnsiConsole = new("--force-ansi-console") { Description = ResString.cmd_forceAnsiConsole };
-    private static readonly Option<bool> NoAnsiColor = new("--no-ansi-color") { Description = ResString.cmd_noAnsiColor };
-    private static readonly Option<string?> DecryptionBinaryPath = new("--decryption-binary-path") { HelpName = "PATH", Description = ResString.cmd_decryptionBinaryPath };
-    private static readonly Option<string?> FFmpegBinaryPath = new("--ffmpeg-binary-path") { HelpName = "PATH", Description = ResString.cmd_ffmpegBinaryPath };
-    private static readonly Option<string?> BaseUrl = new("--base-url") { Description = ResString.cmd_baseUrl };
-    private static readonly Option<bool> ConcurrentDownload = new Option<bool>("-mt", "--concurrent-download") { Description = ResString.cmd_concurrentDownload }.WithDefault(false);
-    private static readonly Option<bool> NoLog = new Option<bool>("--no-log") { Description = ResString.cmd_noLog }.WithDefault(false);
-    private static readonly Option<bool> AllowHlsMultiExtMap = new Option<bool>("--allow-hls-multi-ext-map") { Description = ResString.cmd_allowHlsMultiExtMap }.WithDefault(false);
-    private static readonly Option<string[]?> AdKeywords = new("--ad-keyword") { HelpName = "REG", Description = ResString.cmd_adKeyword };
-    private static readonly Option<long?> MaxSpeed = new("-R", "--max-speed") { HelpName = "SPEED", Description = ResString.cmd_maxSpeed, CustomParser = ParseSpeedLimit };
+    private static readonly Argument<string> Input = new Argument<string>("input").WithDescription(() => ResString.cmd_Input);
+    private static readonly Option<string?> Config = new Option<string?>("--config") { HelpName = "FILE", Arity = ArgumentArity.ExactlyOne }.WithDescription(() => ResString.cmd_config);
+    private static readonly Option<bool> NoConfig = new Option<bool>("--no-config").WithDescription(() => ResString.cmd_noConfig);
+    private static readonly Option<string?> TmpDir = new Option<string?>("--tmp-dir").WithDescription(() => ResString.cmd_tmpDir);
+    private static readonly Option<string?> SaveDir = new Option<string?>("--save-dir").WithDescription(() => ResString.cmd_saveDir);
+    private static readonly Option<string?> SaveName = new Option<string?>("--save-name") { CustomParser = ParseSaveName }.WithDescription(() => ResString.cmd_saveName);
+    private static readonly Option<string?> SavePattern = new Option<string?>("--save-pattern").WithDescription(() => ResString.cmd_savePattern);
+    private static readonly Option<string?> LogFilePath = new Option<string?>("--log-file-path") { CustomParser = ParseFilePath }.WithDescription(() => ResString.cmd_logFilePath);
+    private static readonly Option<string?> UILanguage = new Option<string?>("--ui-language").AcceptOnlyFromAmong("en-US", "zh-CN", "zh-TW").WithDescription(() => ResString.cmd_uiLanguage);
+    private static readonly Option<string?> UrlProcessorArgs = new Option<string?>("--urlprocessor-args").WithDescription(() => ResString.cmd_urlProcessorArgs);
+    private static readonly Option<string> KeyTextFile = new Option<string>("--key-text-file").WithDescription(() => ResString.cmd_keyText);
+    private static readonly Option<Dictionary<string, string>> Headers = new Option<Dictionary<string, string>>("-H", "--header") { HelpName = "header", Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, CustomParser = ParseHeaders }.WithDescription(() => ResString.cmd_header);
+    private static readonly Option<string?> Cookies = new Option<string?>("--cookies") { HelpName = "FILE", Arity = ArgumentArity.ExactlyOne }.WithDescription(() => ResString.cmd_cookies);
+    private static readonly Option<LogLevel> LogLevel = new Option<LogLevel>("--log-level") { DefaultValueFactory = _ => Common.Log.LogLevel.INFO }.WithDescription(() => ResString.cmd_logLevel);
+    private static readonly Option<SubtitleFormat> SubtitleFormat = new Option<SubtitleFormat>("--sub-format") { DefaultValueFactory = _ => Enum.SubtitleFormat.SRT }.WithDescription(() => ResString.cmd_subFormat);
+    private static readonly Option<bool> DisableUpdateCheck = new Option<bool>("--disable-update-check").WithDefault(false).WithDescription(() => ResString.cmd_disableUpdateCheck);
+    private static readonly Option<bool> AutoSelect = new Option<bool>("--auto-select").WithDefault(false).WithDescription(() => ResString.cmd_autoSelect);
+    private static readonly Option<bool> SubOnly = new Option<bool>("--sub-only").WithDefault(false).WithDescription(() => ResString.cmd_subOnly);
+    private static readonly Option<int> ThreadCount = new Option<int>("--thread-count") { HelpName = "number", DefaultValueFactory = _ => Environment.ProcessorCount }.WithDescription(() => ResString.cmd_threadCount);
+    private static readonly Option<int> DownloadRetryCount = new Option<int>("--download-retry-count") { HelpName = "number", DefaultValueFactory = _ => 3 }.WithDescription(() => ResString.cmd_downloadRetryCount);
+    private static readonly Option<double> HttpRequestTimeout = new Option<double>("--http-request-timeout") { HelpName = "seconds", DefaultValueFactory = _ => 100 }.WithDescription(() => ResString.cmd_httpRequestTimeout);
+    private static readonly Option<bool> SkipMerge = new Option<bool>("--skip-merge").WithDefault(false).WithDescription(() => ResString.cmd_skipMerge);
+    private static readonly Option<bool> SkipDownload = new Option<bool>("--skip-download").WithDefault(false).WithDescription(() => ResString.cmd_skipDownload);
+    private static readonly Option<bool> NoDateInfo = new Option<bool>("--no-date-info").WithDefault(false).WithDescription(() => ResString.cmd_noDateInfo);
+    private static readonly Option<string?> CopyrightInfo = new Option<string?>("--copyright-info").WithDescription(() => ResString.cmd_copyrightInfo);
+    private static readonly Option<string?> CommnetInfo = new Option<string?>("--commnet-info").WithDescription(() => ResString.cmd_commnetInfo);
+    private static readonly Option<string?> MuxMetadataFile = new Option<string?>("--mux-metadata-file") { HelpName = "FILE", Arity = ArgumentArity.ExactlyOne }.WithDescription(() => ResString.cmd_muxMetadataFile);
+    private static readonly Option<bool> BinaryMerge = new Option<bool>("--binary-merge").WithDefault(false).WithDescription(() => ResString.cmd_binaryMerge);
+    private static readonly Option<FFmpegConcatMode> FFmpegConcatMode = new Option<FFmpegConcatMode>("--ffmpeg-concat-mode") { DefaultValueFactory = _ => Enum.FFmpegConcatMode.LOCAL_HTTP }.WithDescription(() => ResString.cmd_ffmpegConcatMode);
+    private static readonly Option<bool> UseFFmpegConcatDemuxer = new Option<bool>("--use-ffmpeg-concat-demuxer").WithDefault(false).WithDescription(() => ResString.cmd_useFFmpegConcatDemuxer);
+    private static readonly Option<bool> DelAfterDone = new Option<bool>("--del-after-done").WithDefault(true).WithDescription(() => ResString.cmd_delAfterDone);
+    private static readonly Option<bool> AutoSubtitleFix = new Option<bool>("--auto-subtitle-fix").WithDefault(true).WithDescription(() => ResString.cmd_subtitleFix);
+    private static readonly Option<bool> CheckSegmentsCount = new Option<bool>("--check-segments-count").WithDefault(true).WithDescription(() => ResString.cmd_checkSegmentsCount);
+    private static readonly Option<bool> WriteMetaJson = new Option<bool>("--write-meta-json").WithDefault(true).WithDescription(() => ResString.cmd_writeMetaJson);
+    private static readonly Option<bool> AppendUrlParams = new Option<bool>("--append-url-params").WithDefault(false).WithDescription(() => ResString.cmd_appendUrlParams);
+    private static readonly Option<bool> MP4RealTimeDecryption = new Option<bool>("--mp4-real-time-decryption").WithDefault(false).WithDescription(() => ResString.cmd_MP4RealTimeDecryption);
+    private static readonly Option<bool> SkipSubtitleDecrypt = new Option<bool>("--skip-subtitle-decrypt").WithDescription(() => ResString.cmd_skipSubtitleDecrypt).WithDefault(true);
+    private static readonly Option<bool> SkipAudioDecrypt = new Option<bool>("--skip-audio-decrypt").WithDescription(() => ResString.cmd_skipAudioDecrypt).WithDefault(true);
+    private static readonly Option<bool> ForceMuxDolby = new Option<bool>("--force-mux-dolby").WithDescription(() => ResString.cmd_forceMuxDolby).WithDefault(true);
+    private static readonly Option<bool> UseShakaPackager = new Option<bool>("--use-shaka-packager") { Hidden = true }.WithDefault(false).WithDescription(() => ResString.cmd_useShakaPackager);
+    private static readonly Option<DecryptEngine> DecryptionEngine = new Option<DecryptEngine>("--decryption-engine") { DefaultValueFactory = _ => DecryptEngine.AUTO }.WithDescription(() => ResString.cmd_decryptionEngine);
+    private static readonly Option<bool> ForceAnsiConsole = new Option<bool>("--force-ansi-console").WithDescription(() => ResString.cmd_forceAnsiConsole);
+    private static readonly Option<bool> NoAnsiColor = new Option<bool>("--no-ansi-color").WithDescription(() => ResString.cmd_noAnsiColor);
+    private static readonly Option<string?> DecryptionBinaryPath = new Option<string?>("--decryption-binary-path") { HelpName = "PATH" }.WithDescription(() => ResString.cmd_decryptionBinaryPath);
+    private static readonly Option<string?> FFmpegBinaryPath = new Option<string?>("--ffmpeg-binary-path") { HelpName = "PATH" }.WithDescription(() => ResString.cmd_ffmpegBinaryPath);
+    private static readonly Option<string?> BaseUrl = new Option<string?>("--base-url").WithDescription(() => ResString.cmd_baseUrl);
+    private static readonly Option<bool> ConcurrentDownload = new Option<bool>("-mt", "--concurrent-download").WithDefault(false).WithDescription(() => ResString.cmd_concurrentDownload);
+    private static readonly Option<bool> NoLog = new Option<bool>("--no-log").WithDefault(false).WithDescription(() => ResString.cmd_noLog);
+    private static readonly Option<bool> AllowHlsMultiExtMap = new Option<bool>("--allow-hls-multi-ext-map").WithDefault(false).WithDescription(() => ResString.cmd_allowHlsMultiExtMap);
+    private static readonly Option<string[]?> AdKeywords = new Option<string[]?>("--ad-keyword") { HelpName = "REG" }.WithDescription(() => ResString.cmd_adKeyword);
+    private static readonly Option<bool> VodSelectParts = new Option<bool>("--vod-select-parts").WithDescription(() => ResString.cmd_vodSelectParts);
+    private static readonly Option<bool> VodListParts = new Option<bool>("--vod-list-parts").WithDefault(false).WithDescription(() => ResString.cmd_vodListParts);
+    private static readonly Option<string?> VodDropParts = new Option<string?>("--vod-drop-parts") { HelpName = "IDS" }.WithDescription(() => ResString.cmd_vodDropParts);
+    private static readonly Option<long?> MaxSpeed = new Option<long?>("-R", "--max-speed") { HelpName = "SPEED", CustomParser = ParseSpeedLimit }.WithDescription(() => ResString.cmd_maxSpeed);
 
+
+    private static readonly Option<string?> NetworkInterface = new Option<string?>("--interface") { HelpName = "INTERFACE" }.WithDescription(() => ResString.cmd_networkInterface);
 
     // 代理选项
-    private static readonly Option<bool> UseSystemProxy = new Option<bool>("--use-system-proxy") { Description = ResString.cmd_useSystemProxy }.WithDefault(true);
-    private static readonly Option<WebProxy?> CustomProxy = new("--custom-proxy") { HelpName = "URL", Description = ResString.cmd_customProxy, CustomParser = ParseProxy};
+    private static readonly Option<bool> UseSystemProxy = new Option<bool>("--use-system-proxy").WithDefault(true).WithDescription(() => ResString.cmd_useSystemProxy);
+    private static readonly Option<WebProxy?> CustomProxy = new Option<WebProxy?>("--custom-proxy") { HelpName = "URL", CustomParser = ParseProxy }.WithDescription(() => ResString.cmd_customProxy);
 
     // 只下载部分分片
-    private static readonly Option<CustomRange?> CustomRange = new("--custom-range") { HelpName = "RANGE", Description = ResString.cmd_customRange, CustomParser = ParseCustomRange };
+    private static readonly Option<CustomRange?> CustomRange = new Option<CustomRange?>("--custom-range") { HelpName = "RANGE", CustomParser = ParseCustomRange }.WithDescription(() => ResString.cmd_customRange);
 
 
     // morehelp
-    private static readonly Option<string?> MoreHelp = new("--morehelp") { HelpName = "OPTION", Description = ResString.cmd_moreHelp };
+    private static readonly Option<string?> MoreHelp = new Option<string?>("--morehelp") { HelpName = "OPTION" }.WithDescription(() => ResString.cmd_moreHelp);
+    private static readonly Option<string?> GenerateCompletion = new Option<string?>("--generate-completion")
+    {
+        HelpName = "SHELL", Arity = ArgumentArity.ExactlyOne,
+        Action = new PowerShellCompletionAction()
+    }.AcceptOnlyFromAmong("powershell").WithDescription(() => ResString.cmd_generateCompletion);
 
     // 自定义KEY等
-    private static readonly Option<EncryptMethod?> CustomHLSMethod = new("--custom-hls-method") { HelpName = "METHOD", Description = ResString.cmd_customHLSMethod };
-    private static readonly Option<byte[]?> CustomHLSKey = new("--custom-hls-key") { HelpName = "FILE|HEX|BASE64", Description = ResString.cmd_customHLSKey, CustomParser = ParseHLSCustomKey };
-    private static readonly Option<byte[]?> CustomHLSIv = new(name: "--custom-hls-iv") { HelpName = "FILE|HEX|BASE64", Description = ResString.cmd_customHLSIv, CustomParser = ParseHLSCustomKey };
-    private static readonly Option<string[]?> Keys = new("--key") { Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, Description = ResString.cmd_keys, CustomParser = ParseCustomKeys};
+    private static readonly Option<EncryptMethod?> CustomHLSMethod = new Option<EncryptMethod?>("--custom-hls-method") { HelpName = "METHOD" }.WithDescription(() => ResString.cmd_customHLSMethod);
+    // byte[] 是单个密钥或 IV 的解析结果，不能按数组类型推断成可重复的参数列表。
+    private static readonly Option<byte[]?> CustomHLSKey = new Option<byte[]?>("--custom-hls-key") { HelpName = "FILE|HEX|BASE64", Arity = ArgumentArity.ExactlyOne, CustomParser = ParseHLSCustomKey }.WithDescription(() => ResString.cmd_customHLSKey);
+    private static readonly Option<byte[]?> CustomHLSIv = new Option<byte[]?>(name: "--custom-hls-iv") { HelpName = "FILE|HEX|BASE64", Arity = ArgumentArity.ExactlyOne, CustomParser = ParseHLSCustomKey }.WithDescription(() => ResString.cmd_customHLSIv);
+    private static readonly Option<CustomHlsScope> CustomHLSScope = new Option<CustomHlsScope>("--custom-hls-scope") { HelpName = "SCOPE", DefaultValueFactory = _ => CustomHlsScope.ALL }.WithDescription(() => ResString.cmd_customHLSScope);
+    private static readonly Option<string[]?> Keys = new Option<string[]?>("--key") { Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, CustomParser = ParseCustomKeys }.WithDescription(() => ResString.cmd_keys);
 
     // 任务开始时间
-    private static readonly Option<DateTime?> TaskStartAt = new("--task-start-at") { HelpName = "yyyyMMddHHmmss", Description = ResString.cmd_taskStartAt, CustomParser = ParseStartTime };
+    private static readonly Option<DateTime?> TaskStartAt = new Option<DateTime?>("--task-start-at") { HelpName = "yyyyMMddHHmmss", CustomParser = ParseStartTime }.WithDescription(() => ResString.cmd_taskStartAt);
 
 
     // 直播相关
-    private static readonly Option<bool> LivePerformAsVod = new Option<bool>("--live-perform-as-vod") { Description = ResString.cmd_livePerformAsVod }.WithDefault(false);
-    private static readonly Option<bool> LiveRealTimeMerge = new Option<bool>("--live-real-time-merge") { Description = ResString.cmd_liveRealTimeMerge }.WithDefault(false);
-    private static readonly Option<bool> LiveKeepSegments = new Option<bool>("--live-keep-segments") { Description = ResString.cmd_liveKeepSegments }.WithDefault(true);
-    private static readonly Option<bool> LivePipeMux = new Option<bool>("--live-pipe-mux") { Description = ResString.cmd_livePipeMux }.WithDefault(false);
-    private static readonly Option<TimeSpan?> LiveRecordLimit = new("--live-record-limit") { HelpName = "HH:mm:ss", Description = ResString.cmd_liveRecordLimit, CustomParser = ParseLiveLimit };
-    private static readonly Option<int?> LiveWaitTime = new("--live-wait-time") { HelpName = "SEC", Description = ResString.cmd_liveWaitTime };
-    private static readonly Option<int> LiveTakeCount = new("--live-take-count") { HelpName = "NUM", Description = ResString.cmd_liveTakeCount, DefaultValueFactory = _ => 16 };
-    private static readonly Option<bool> LiveFixVttByAudio = new Option<bool>("--live-fix-vtt-by-audio") { Description = ResString.cmd_liveFixVttByAudio }.WithDefault(false);
+    private static readonly Option<bool> LivePerformAsVod = new Option<bool>("--live-perform-as-vod").WithDefault(false).WithDescription(() => ResString.cmd_livePerformAsVod);
+    private static readonly Option<bool> LiveRealTimeMerge = new Option<bool>("--live-real-time-merge").WithDefault(false).WithDescription(() => ResString.cmd_liveRealTimeMerge);
+    private static readonly Option<bool> LiveKeepSegments = new Option<bool>("--live-keep-segments").WithDefault(true).WithDescription(() => ResString.cmd_liveKeepSegments);
+    private static readonly Option<bool> LivePipeMux = new Option<bool>("--live-pipe-mux").WithDefault(false).WithDescription(() => ResString.cmd_livePipeMux);
+    private static readonly Option<TimeSpan?> LiveRecordLimit = new Option<TimeSpan?>("--live-record-limit") { HelpName = "HH:mm:ss", CustomParser = ParseLiveLimit }.WithDescription(() => ResString.cmd_liveRecordLimit);
+    private static readonly Option<int?> LiveWaitTime = new Option<int?>("--live-wait-time") { HelpName = "SEC" }.WithDescription(() => ResString.cmd_liveWaitTime);
+    private static readonly Option<int?> LiveIdleTimeout = new Option<int?>("--live-idle-timeout") { HelpName = "SEC", CustomParser = ParseLiveIdleTimeout }.WithDescription(() => ResString.cmd_liveIdleTimeout);
+    private static readonly Option<int> LiveTakeCount = new Option<int>("--live-take-count") { HelpName = "NUM", DefaultValueFactory = _ => 16 }.WithDescription(() => ResString.cmd_liveTakeCount);
+    private static readonly Option<bool> LiveFixVttByAudio = new Option<bool>("--live-fix-vtt-by-audio").WithDefault(false).WithDescription(() => ResString.cmd_liveFixVttByAudio);
 
 
     // 复杂命令行如下
-    private static readonly Option<MuxOptions?> MuxAfterDone = new("-M", "--mux-after-done") { HelpName = "OPTIONS", Description = ResString.cmd_muxAfterDone, CustomParser = ParseMuxAfterDone };
-    private static readonly Option<List<OutputFile>> MuxImports = new("--mux-import") { HelpName = "OPTIONS", Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, Description = ResString.cmd_muxImport, CustomParser = ParseImports };
-    private static readonly Option<StreamFilter?> VideoFilter = new("-sv", "--select-video") { HelpName = "OPTIONS", Description = ResString.cmd_selectVideo, CustomParser = ParseStreamFilter };
-    private static readonly Option<StreamFilter?> AudioFilter = new("-sa", "--select-audio") { HelpName = "OPTIONS", Description = ResString.cmd_selectAudio, CustomParser = ParseStreamFilter };
-    private static readonly Option<StreamFilter?> SubtitleFilter = new("-ss", "--select-subtitle") { HelpName = "OPTIONS", Description = ResString.cmd_selectSubtitle, CustomParser = ParseStreamFilter };
+    private static readonly Option<MuxOptions?> MuxAfterDone = new Option<MuxOptions?>("-M", "--mux-after-done") { HelpName = "OPTIONS", CustomParser = ParseMuxAfterDone }.WithDescription(() => ResString.cmd_muxAfterDone);
+    private static readonly Option<List<OutputFile>> MuxImports = new Option<List<OutputFile>>("--mux-import") { HelpName = "OPTIONS", Arity = ArgumentArity.OneOrMore, AllowMultipleArgumentsPerToken = false, CustomParser = ParseImports }.WithDescription(() => ResString.cmd_muxImport);
+    private static readonly Option<StreamFilter?> VideoFilter = new Option<StreamFilter?>("-sv", "--select-video") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_selectVideo);
+    private static readonly Option<StreamFilter?> AudioFilter = new Option<StreamFilter?>("-sa", "--select-audio") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_selectAudio);
+    private static readonly Option<StreamFilter?> SubtitleFilter = new Option<StreamFilter?>("-ss", "--select-subtitle") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_selectSubtitle);
 
-    private static readonly Option<StreamFilter?> DropVideoFilter = new("-dv", "--drop-video") { HelpName = "OPTIONS", Description = ResString.cmd_dropVideo, CustomParser = ParseStreamFilter };
-    private static readonly Option<StreamFilter?> DropAudioFilter = new("-da", "--drop-audio") { HelpName = "OPTIONS", Description = ResString.cmd_dropAudio, CustomParser = ParseStreamFilter };
-    private static readonly Option<StreamFilter?> DropSubtitleFilter = new("-ds", "--drop-subtitle") { HelpName = "OPTIONS", Description = ResString.cmd_dropSubtitle, CustomParser = ParseStreamFilter };
+    private static readonly Option<StreamFilter?> DropVideoFilter = new Option<StreamFilter?>("-dv", "--drop-video") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_dropVideo);
+    private static readonly Option<StreamFilter?> DropAudioFilter = new Option<StreamFilter?>("-da", "--drop-audio") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_dropAudio);
+    private static readonly Option<StreamFilter?> DropSubtitleFilter = new Option<StreamFilter?>("-ds", "--drop-subtitle") { HelpName = "OPTIONS", CustomParser = ParseStreamFilter }.WithDescription(() => ResString.cmd_dropSubtitle);
 
     /// <summary>
     /// 解析下载速度限制
@@ -335,6 +358,18 @@ internal static partial class CommandInvoker
             result.AddError("error in parse LiveRecordLimit: " + input);
             return null;
         }
+    }
+
+    private static int? ParseLiveIdleTimeout(ArgumentResult result)
+    {
+        var input = result.Tokens[0].Value;
+        if (int.TryParse(input, out var seconds) && seconds > 0)
+        {
+            return seconds;
+        }
+
+        result.AddError("live-idle-timeout must be a positive number of seconds: " + input);
+        return null;
     }
 
     /// <summary>
@@ -598,11 +633,7 @@ internal static partial class CommandInvoker
     }
 
     private static bool HasOption(this ParseResult result, Option option)
-    {
-        var allTokens = result.Tokens.Select(x => x.Value).ToList();
-        List<string> optionNames = [option.Name, ..option.Aliases];
-        return optionNames.Any(x => allTokens.Contains(x));
-    }
+        => result.GetResult(option) is { Implicit: false };
     
     private static Option<T> WithDefault<T>(this Option<T> option, T defaultValue)
     {
@@ -631,6 +662,7 @@ internal static partial class CommandInvoker
             SkipMerge = result.GetValue(SkipMerge),
             BinaryMerge = result.GetValue(BinaryMerge),
             UseFFmpegConcatDemuxer = result.GetValue(UseFFmpegConcatDemuxer),
+            FFmpegConcatMode = result.GetValue(FFmpegConcatMode),
             DelAfterDone = result.GetValue(DelAfterDone),
             AutoSubtitleFix = result.GetValue(AutoSubtitleFix),
             CheckSegmentsCount = result.GetValue(CheckSegmentsCount),
@@ -656,8 +688,10 @@ internal static partial class CommandInvoker
             DecryptionBinaryPath = result.GetValue(DecryptionBinaryPath),
             FFmpegBinaryPath = result.GetValue(FFmpegBinaryPath),
             KeyTextFile = result.GetValue(KeyTextFile),
+            Cookies = result.GetValue(Cookies),
             DownloadRetryCount = result.GetValue(DownloadRetryCount),
             HttpRequestTimeout = result.GetValue(HttpRequestTimeout),
+            HttpRequestTimeoutSpecified = result.GetResult(HttpRequestTimeout) is { Implicit: false },
             BaseUrl = result.GetValue(BaseUrl),
             MuxImports = result.GetValue(MuxImports),
             ConcurrentDownload = result.GetValue(ConcurrentDownload),
@@ -676,8 +710,10 @@ internal static partial class CommandInvoker
             LiveFixVttByAudio = result.GetValue(LiveFixVttByAudio),
             UseSystemProxy = result.GetValue(UseSystemProxy),
             CustomProxy = result.GetValue(CustomProxy),
+            NetworkInterface = result.GetValue(NetworkInterface),
             CustomRange = result.GetValue(CustomRange),
             LiveWaitTime = result.GetValue(LiveWaitTime),
+            LiveIdleTimeout = result.GetValue(LiveIdleTimeout),
             LiveTakeCount = result.GetValue(LiveTakeCount),
             NoDateInfo = result.GetValue(NoDateInfo),
             CopyrightInfo = result.GetValue(CopyrightInfo),
@@ -686,12 +722,17 @@ internal static partial class CommandInvoker
             NoLog = result.GetValue(NoLog),
             AllowHlsMultiExtMap = result.GetValue(AllowHlsMultiExtMap),
             AdKeywords = result.GetValue(AdKeywords),
+            // 未传参数保留自动判断，显式 false 则关闭选段交互。
+            VodSelectParts = result.HasOption(VodSelectParts) ? result.GetValue(VodSelectParts) : null,
+            VodListParts = result.GetValue(VodListParts),
+            VodDropParts = result.GetValue(VodDropParts),
             MaxSpeed = result.GetValue(MaxSpeed),
         };
 
         if (result.HasOption(CustomHLSMethod)) option.CustomHLSMethod = result.GetValue(CustomHLSMethod);
         if (result.HasOption(CustomHLSKey)) option.CustomHLSKey = result.GetValue(CustomHLSKey);
         if (result.HasOption(CustomHLSIv)) option.CustomHLSIv = result.GetValue(CustomHLSIv);
+        option.CustomHLSScope = result.GetValue(CustomHLSScope);
 
         var parsedHeaders = result.GetValue(Headers);
         if (parsedHeaders != null)
@@ -717,8 +758,47 @@ internal static partial class CommandInvoker
     }
 
 
-    public static async Task<int> InvokeArgs(string[] args, Func<MyOption, Task> action)
+    private static T WithDescription<T>(this T symbol, Func<string> text) where T : Symbol
     {
+        // WithDefault 已为布尔选项附加默认值说明，刷新语言时也要保留。
+        var suffix = symbol.Description;
+        Descriptions.Add((symbol, string.IsNullOrEmpty(suffix) ? text : () => $"{text()} {suffix}"));
+        return symbol;
+    }
+
+    internal static RootCommand CreateRootCommand()
+    {
+        // 配置加载前也需要完整的参数边界；选定 UI 语言后再更新帮助文本。
+        foreach (var (symbol, text) in Descriptions)
+            symbol.Description = text();
+        return new(VERSION_INFO)
+        {
+            Input, Config, NoConfig, TmpDir, SaveDir, SaveName, SavePattern, LogFilePath, BaseUrl, ThreadCount, DownloadRetryCount, HttpRequestTimeout, ForceAnsiConsole, NoAnsiColor,AutoSelect, SkipMerge, SkipDownload, CheckSegmentsCount,
+            BinaryMerge, FFmpegConcatMode, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, CopyrightInfo, CommnetInfo, MuxMetadataFile, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, Cookies, SubOnly, SubtitleFormat, AutoSubtitleFix,
+            FFmpegBinaryPath,
+            LogLevel, UILanguage, UrlProcessorArgs, Keys, KeyTextFile, DecryptionEngine, DecryptionBinaryPath, UseShakaPackager, MP4RealTimeDecryption, SkipSubtitleDecrypt, SkipAudioDecrypt, ForceMuxDolby,
+            MaxSpeed,
+            MuxAfterDone,
+            CustomHLSMethod, CustomHLSKey, CustomHLSIv, CustomHLSScope, UseSystemProxy, CustomProxy, NetworkInterface, CustomRange, TaskStartAt,
+            LivePerformAsVod, LiveRealTimeMerge, LiveKeepSegments, LivePipeMux, LiveFixVttByAudio, LiveRecordLimit, LiveWaitTime, LiveIdleTimeout, LiveTakeCount,
+            MuxImports, VideoFilter, AudioFilter, SubtitleFilter, DropVideoFilter, DropAudioFilter, DropSubtitleFilter, AdKeywords, VodSelectParts, VodListParts, VodDropParts, DisableUpdateCheck, AllowHlsMultiExtMap, MoreHelp, GenerateCompletion
+        };
+    }
+
+    public static async Task<int> InvokeArgs(ConfigFile configFile, Func<MyOption, Task> action)
+    {
+        var rootCommand = CreateRootCommand();
+        string[] args;
+        try
+        {
+            args = configFile.Merge(rootCommand);
+        }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine($"{ResString.configFileLoadFailed}: {ex.Message}");
+            Environment.Exit(1);
+            return 1;
+        }
         var argList = new List<string>(args);
         var index = -1;
         if ((index = argList.IndexOf("--morehelp")) >= 0 && argList.Count > index + 1)
@@ -732,24 +812,12 @@ internal static partial class CommandInvoker
                 "select-audio" => ResString.cmd_selectAudio_more,
                 "select-subtitle" => ResString.cmd_selectSubtitle_more,
                 "custom-range" => ResString.cmd_custom_range,
+                "save-pattern" => ResString.cmd_savePattern_more,
                 _ => $"Option=\"{option}\" not found"
             };
             Console.WriteLine($"More Help:\r\n\r\n  --{option}\r\n\r\n" + msg);
             Environment.Exit(0);
         }
-
-        var rootCommand = new RootCommand(VERSION_INFO)
-        {
-            Input, TmpDir, SaveDir, SaveName, SavePattern, LogFilePath, BaseUrl, ThreadCount, DownloadRetryCount, HttpRequestTimeout, ForceAnsiConsole, NoAnsiColor,AutoSelect, SkipMerge, SkipDownload, CheckSegmentsCount,
-            BinaryMerge, UseFFmpegConcatDemuxer, DelAfterDone, NoDateInfo, CopyrightInfo, CommnetInfo, MuxMetadataFile, NoLog, WriteMetaJson, AppendUrlParams, ConcurrentDownload, Headers, SubOnly, SubtitleFormat, AutoSubtitleFix,
-            FFmpegBinaryPath,
-            LogLevel, UILanguage, UrlProcessorArgs, Keys, KeyTextFile, DecryptionEngine, DecryptionBinaryPath, UseShakaPackager, MP4RealTimeDecryption, SkipSubtitleDecrypt, SkipAudioDecrypt, ForceMuxDolby,
-            MaxSpeed,
-            MuxAfterDone,
-            CustomHLSMethod, CustomHLSKey, CustomHLSIv, UseSystemProxy, CustomProxy, CustomRange, TaskStartAt,
-            LivePerformAsVod, LiveRealTimeMerge, LiveKeepSegments, LivePipeMux, LiveFixVttByAudio, LiveRecordLimit, LiveWaitTime, LiveTakeCount,
-            MuxImports, VideoFilter, AudioFilter, SubtitleFilter, DropVideoFilter, DropAudioFilter, DropSubtitleFilter, AdKeywords, DisableUpdateCheck, AllowHlsMultiExtMap, MoreHelp
-        };
 
         rootCommand.TreatUnmatchedTokensAsErrors = true;
         rootCommand.SetAction(parseResult =>
@@ -760,14 +828,16 @@ internal static partial class CommandInvoker
 
         var config = new ParserConfiguration
         {
-            EnablePosixBundling = false
+            EnablePosixBundling = false,
+            ResponseFileTokenReplacer = null
         };
 
         try
         {
             var parseResult = rootCommand.Parse(args, config);
             var exitCode = await parseResult.InvokeAsync();
-            Environment.Exit(exitCode);
+            // 下载或录制失败会设置进程退出码，不能被命令行解析成功返回的 0 覆盖。
+            Environment.Exit(exitCode != 0 ? exitCode : Environment.ExitCode);
         }
         catch (Exception ex)
         {

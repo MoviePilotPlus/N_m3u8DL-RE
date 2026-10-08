@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace N_m3u8DL_RE.Common.Entity;
@@ -79,8 +80,8 @@ public partial class WebVttSub
                 if (string.IsNullOrEmpty(payload.Trim())) continue; // 没获取到payload 跳过添加
 
                 var arr = SplitRegex().Split(timeLine.Replace("-->", "")).Where(s => !string.IsNullOrEmpty(s)).ToList();
-                var startTime = ConvertToTS(arr[0]);
-                var endTime = ConvertToTS(arr[1]);
+                var startTime = ParseTimestamp(arr[0]);
+                var endTime = ParseTimestamp(arr[1]);
                 var style = arr.Count > 2 ? string.Join(" ", arr.Skip(2)) : "";
                 webSub.Cues.Add(new SubCue()
                 {
@@ -158,8 +159,10 @@ public partial class WebVttSub
         if ((this.Cues.Count > 0 && sub.Cues.Count > 0 && sub.Cues.First().StartTime < this.Cues.Last().EndTime && sub.Cues.First().EndTime != this.Cues.Last().EndTime) || this.Cues.Count == 0)
         {
             // The MPEG2 transport stream clocks (PCR, PTS, DTS) all have units of 1/90000 second
-            var seconds = (sub.MpegtsTimestamp - baseTimestamp) / 90000;
-            var offset = TimeSpan.FromSeconds(seconds);
+            // 90 kHz 时间戳可能包含小数秒，不能先做整数除法丢掉字幕偏移。
+            var seconds = (sub.MpegtsTimestamp - baseTimestamp) / 90000.0;
+            // 转换时取最近的 tick，避免 2.002 秒等值被截断后显示成 2.001 秒。
+            var offset = TimeSpan.FromTicks((long)Math.Round(seconds * TimeSpan.TicksPerSecond));
             // 当前预添加的字幕的起始时间小于实际上已经走过的时间(如offset已经是100秒，而字幕起始却是2秒)，才修复
             if (sub.Cues.Count > 0 && sub.Cues.First().StartTime < offset)
             {
@@ -177,29 +180,31 @@ public partial class WebVttSub
         return this.Cues.Where(c => !string.IsNullOrEmpty(c.Payload));
     }
 
-    private static TimeSpan ConvertToTS(string str)
+    /// <summary>
+    /// 解析字幕时间，小时允许超过 23，兼容 SRT 的逗号和 TTML 的秒数形式。
+    /// </summary>
+    public static TimeSpan ParseTimestamp(string timestamp)
     {
-        // 17.0s
-        if (str.EndsWith('s'))
+        timestamp = timestamp.Replace(',', '.');
+        decimal seconds = 0;
+        if (timestamp.EndsWith('s'))
         {
-            double sec = Convert.ToDouble(str[..^1]);
-            return TimeSpan.FromSeconds(sec);
+            seconds = decimal.Parse(timestamp[..^1], CultureInfo.InvariantCulture);
         }
+        else
+        {
+            foreach (var component in timestamp.Split(':'))
+                seconds = seconds * 60 + decimal.Parse(component, CultureInfo.InvariantCulture);
+        }
+        return TimeSpan.FromTicks(checked((long)Math.Round(seconds * TimeSpan.TicksPerSecond)));
+    }
 
-        str = str.Replace(',', '.');
-        long time = 0;
-        string[] parts = str.Split('.');
-        if (parts.Length > 1)
-        {
-            time += Convert.ToInt32(parts.Last().PadRight(3, '0'));
-            str = parts.First();
-        }
-        var t = str.Split(':').Reverse().ToList();
-        for (int i = 0; i < t.Count; i++)
-        {
-            time += (long)Math.Pow(60, i) * Convert.ToInt32(t[i]) * 1000;
-        }
-        return TimeSpan.FromMilliseconds(time);
+    private static string FormatTimestamp(TimeSpan time, char separator)
+    {
+        // TimeSpan 的 hh 只包含一天内的小时，会把累计数百小时的广播字幕折回。
+        time = time.Duration();
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{time.Ticks / TimeSpan.TicksPerHour:00}:{time.Minutes:00}:{time.Seconds:00}{separator}{time.Milliseconds:000}");
     }
 
     public override string ToString()
@@ -207,7 +212,7 @@ public partial class WebVttSub
         var sb = new StringBuilder();
         foreach (var c in GetCues())  // 输出时去除空串
         {
-            sb.AppendLine(c.StartTime.ToString(@"hh\:mm\:ss\.fff") + " --> " + c.EndTime.ToString(@"hh\:mm\:ss\.fff") + " " + c.Settings);
+            sb.AppendLine(FormatTimestamp(c.StartTime, '.') + " --> " + FormatTimestamp(c.EndTime, '.') + " " + c.Settings);
             sb.AppendLine(c.Payload);
             sb.AppendLine();
         }
@@ -243,7 +248,7 @@ public partial class WebVttSub
         foreach (var c in GetCues())
         {
             sb.AppendLine($"{index++}");
-            sb.AppendLine(c.StartTime.ToString(@"hh\:mm\:ss\,fff") + " --> " + c.EndTime.ToString(@"hh\:mm\:ss\,fff"));
+            sb.AppendLine(FormatTimestamp(c.StartTime, ',') + " --> " + FormatTimestamp(c.EndTime, ','));
             sb.AppendLine(c.Payload);
             sb.AppendLine();
         }

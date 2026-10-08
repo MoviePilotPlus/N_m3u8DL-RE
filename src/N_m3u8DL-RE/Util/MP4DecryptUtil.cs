@@ -50,7 +50,8 @@ internal static partial class MP4DecryptUtil
                ?? GlobalUtil.FindExecutable("packager-win-x64");
     }
 
-    public static async Task<bool> DecryptAsync(DecryptEngine decryptEngine, string bin, string[]? keys, string source, string dest, string? kid, string init = "", bool isMultiDRM=false)
+    public static async Task<bool> DecryptAsync(DecryptEngine decryptEngine, string bin, string[]? keys, string source, string dest, string? kid, string init = "", bool isMultiDRM=false, bool preserveTimestamp = false)
+
     {
         if (keys == null || keys.Length == 0) return false;
 
@@ -118,6 +119,10 @@ internal static partial class MP4DecryptUtil
         // shakaPackager/ffmpeg 无法单独解密init文件
         if (source.EndsWith("_init.mp4") && decryptEngine != DecryptEngine.MP4DECRYPT) return false;
 
+        // 失败或中断产生的文件不能被重试当成已解密结果，成功后才发布到 _dec 路径。
+        var requestedDest = dest;
+        dest = Path.Combine(Path.GetDirectoryName(dest)!, $"{Guid.NewGuid():N}{Path.GetExtension(dest)}");
+
         string cmd;
 
         var tmpFile = "";
@@ -168,23 +173,44 @@ internal static partial class MP4DecryptUtil
                 enc = tmpFile;
             }
             
-            cmd = $"-loglevel error -nostdin -decryption_key {keyPair.Split(':')[1]} -i \"{enc}\" -c copy \"{dest}\"";
+            // 多 Period 后续仍需用 PTO 裁剪，不能在解密时把源时间戳归零。
+            var timestampOptions = preserveTimestamp || init != "" ? " -copyts" : "";
+            // 实时解密的目标通常是 .m4s，须显式指定 MP4；分片输出保留源时钟并使用可直接拼接的 fMP4。
+            var outputOptions = preserveTimestamp || init != "" ? " -avoid_negative_ts disabled" : "";
+            if (init != "")
+            {
+                // frag_discont 使 tfdt 保留源 DTS；禁用每片的 edit list 偏移和局部索引，避免拼接后时钟归零或索引失效。
+                outputOptions += " -f mp4 -movflags +frag_keyframe+empty_moov+default_base_moof+frag_discont+skip_trailer -use_editlist 0";
+            }
+            cmd = $"-loglevel error -nostdin -y{timestampOptions} -decryption_key {keyPair.Split(':')[1]} -i \"{enc}\" -c copy{outputOptions} \"{dest}\"";
         }
 
-        var isSuccess = await RunCommandAsync(bin, cmd, workDir);
-        
-        // mp4decrypt 还原文件改名操作
-        if (workDir is not null)
+        var isSuccess = false;
+        try
         {
-            if (File.Exists(tmpEncFile)) File.Move(tmpEncFile, source);
-            if (File.Exists(tmpDecFile)) File.Move(tmpDecFile, dest);
+            isSuccess = await RunCommandAsync(bin, cmd, workDir);
+        }
+        finally
+        {
+            // mp4decrypt 还原文件改名操作；启动外部程序失败时也必须恢复源文件。
+            if (workDir is not null)
+            {
+                if (File.Exists(tmpEncFile))
+                    File.Move(tmpEncFile, source);
+                if (File.Exists(tmpDecFile))
+                    File.Move(tmpDecFile, dest);
+            }
+            if (!isSuccess)
+                File.Delete(dest);
         }
 
-        if (isSuccess)
+        if (isSuccess && File.Exists(dest) && new FileInfo(dest).Length > 0)
         {
+            File.Move(dest, requestedDest, true);
             if (tmpFile != "" && File.Exists(tmpFile)) File.Delete(tmpFile);
             return true;
         }
+        File.Delete(dest);
         
         Logger.Error(ResString.decryptionFailed);
         return false;
@@ -249,25 +275,88 @@ internal static partial class MP4DecryptUtil
         return null;
     }
 
-    public static ParsedMP4Info GetMP4Info(byte[] data)
+    public static ParsedMP4Info GetMP4Info(byte[] data, bool log = true)
     {
         var info = MP4InitUtil.ReadInit(data);
-        if (info.Scheme != null) Logger.WarnMarkUp($"[grey]Type: {info.Scheme}[/]");
-        if (info.PSSH != null) Logger.WarnMarkUp($"[grey]PSSH(WV): {info.PSSH}[/]");
+        if (log && info.Scheme != null)
+            Logger.WarnMarkUp($"[grey]Type: {info.Scheme}[/]");
+        if (log && info.PSSH != null)
+            Logger.WarnMarkUp($"[grey]PSSH(WV): {info.PSSH}[/]");
         // 零值KID不打印，避免误导
-        if (info.KID != null && info.KID != ZeroKid) Logger.WarnMarkUp($"[grey]KID: {info.KID}[/]");
-        if (info is { CryptByteBlock: not null, SkipByteBlock: not null })
+        if (log && info.KID != null && info.KID != ZeroKid)
+            Logger.WarnMarkUp($"[grey]KID: {info.KID}[/]");
+        if (log && info is { CryptByteBlock: not null, SkipByteBlock: not null })
             Logger.WarnMarkUp($"[grey]Pattern: crypt={info.CryptByteBlock} skip={info.SkipByteBlock} perSampleIv={info.PerSampleIvSize}[/]");
-        if (info.DefaultConstantIV != null) Logger.WarnMarkUp($"[grey]ConstantIV: {info.DefaultConstantIV}[/]");
+        if (log && info.DefaultConstantIV != null) Logger.WarnMarkUp($"[grey]ConstantIV: {info.DefaultConstantIV}[/]");
         return info;
     }
 
-    public static ParsedMP4Info GetMP4Info(string output)
+    public static ParsedMP4Info GetMP4Info(string output, bool log = true)
     {
         using var fs = File.OpenRead(output);
         var header = new byte[1 * 1024 * 1024]; // 1MB
         _ = fs.Read(header);
-        return GetMP4Info(header);
+        return GetMP4Info(header, log);
+    }
+
+    internal static bool HasEncryptedTracks(string file)
+    {
+        using var stream = File.OpenRead(file);
+        Span<byte> signature = stackalloc byte[4];
+        if (stream.Read(signature) != 4)
+            return false;
+        // WebM 使用 EBML 的 ContentEncryption，不能用 MP4 的 schm 判断解密结果。
+        if (!signature.SequenceEqual<byte>([0x1a, 0x45, 0xdf, 0xa3]))
+            return GetMP4Info(file, log: false).Scheme != null;
+        stream.Position = 0;
+        return ReadWebmElements(stream, stream.Length);
+    }
+
+    private static bool ReadWebmElements(Stream stream, long end)
+    {
+        while (stream.Position < end)
+        {
+            var id = ReadEbmlInteger(stream, keepMarker: true);
+            var size = ReadEbmlInteger(stream, keepMarker: false);
+            var available = (ulong)(end - stream.Position);
+            var elementEnd = size == ulong.MaxValue ? end : stream.Position + (long)Math.Min(size, available);
+            if (id == 0x5035)
+                return true; // ContentEncryption
+            if (id is 0x18538067 or 0x1654ae6b or 0xae or 0x6d80 or 0x6240)
+            {
+                var encrypted = ReadWebmElements(stream, elementEnd);
+                // 只解析 Segment/Tracks 的结构；媒体样本中的相同字节不能被当成加密标记。
+                if (encrypted || id == 0x1654ae6b)
+                    return encrypted;
+            }
+            stream.Position = elementEnd;
+        }
+        return false;
+    }
+
+    private static ulong ReadEbmlInteger(Stream stream, bool keepMarker)
+    {
+        var first = stream.ReadByte();
+        if (first <= 0)
+            throw new InvalidDataException(ResString.webmInvalid);
+        var mask = 0x80;
+        var length = 1;
+        while ((first & mask) == 0)
+        {
+            mask >>= 1;
+            length++;
+        }
+        if (keepMarker && length > 4)
+            throw new InvalidDataException(ResString.webmInvalid);
+        ulong value = (uint)(keepMarker ? first : first & (mask - 1));
+        for (var i = 1; i < length; i++)
+        {
+            var next = stream.ReadByte();
+            if (next < 0)
+                throw new EndOfStreamException();
+            value = (value << 8) | (uint)next;
+        }
+        return !keepMarker && value == (1UL << (7 * length)) - 1 ? ulong.MaxValue : value;
     }
 
     public static string? ReadInitShaka(string output, string bin)

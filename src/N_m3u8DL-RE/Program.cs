@@ -33,26 +33,38 @@ internal class Program
             }
         }
         
-        Console.CancelKeyPress += (_, _) => RestoreTerminal();
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreTerminal();
-        ServicePointManager.DefaultConnectionLimit = 1024;
-        try { Console.CursorVisible = true; } catch { }
-
-        string loc = CultureUtil.GetCurrentCultureName();
-
-        // 处理用户-h等请求
-        var index = -1;
-        var list = new List<string>(args);
-        if ((index = list.IndexOf("--ui-language")) != -1 && list.Count > index + 1 && new List<string> { "en-US", "zh-CN", "zh-TW" }.Contains(list[index + 1]))
-        {
-            loc = list[index + 1];
-        }
-        
+        var loc = new ConfigFile(args, []).GetLanguage() ?? CultureUtil.GetCurrentCultureName();
         ResString.CurrentLoc = loc;
-
         CultureUtil.ChangeCurrentCultureName(loc);
 
-        await CommandInvoker.InvokeArgs(args, DoWorkAsync);
+        ConfigFile configFile;
+        try
+        {
+            configFile = ConfigFile.Load(args);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"{ResString.configFileLoadFailed}: {ex.Message}");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        // 在生成帮助文本前选定配置中的语言，使帮助与实际运行语言一致。
+        loc = configFile.GetLanguage() ?? loc;
+        ResString.CurrentLoc = loc;
+        CultureUtil.ChangeCurrentCultureName(loc);
+
+        // 补全只输出脚本或候选项；不要初始化终端或注册退出回调，否则 tput 等输出会混入结果。
+        var completionRequest = ConfigFile.IsCompletionRequest(configFile.Arguments);
+        if (!completionRequest)
+        {
+            Console.CancelKeyPress += (_, _) => RestoreTerminal();
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreTerminal();
+            ServicePointManager.DefaultConnectionLimit = 1024;
+            try { Console.CursorVisible = true; } catch { }
+        }
+
+        await CommandInvoker.InvokeArgs(configFile, DoWorkAsync);
     }
 
     static void RestoreTerminal()
@@ -88,10 +100,6 @@ internal class Program
         }
         CustomAnsiConsole.InitConsole(option.ForceAnsiConsole, option.NoAnsiColor);
         
-        // 检测更新
-        if (!option.DisableUpdateCheck)
-            _ = CheckUpdateAsync();
-
         Logger.IsWriteFile = !option.NoLog;
         Logger.LogFilePath = option.LogFilePath;
         Logger.InitLogFile();
@@ -100,14 +108,20 @@ internal class Program
 
         if (option.UseSystemProxy == false)
         {
-            HTTPUtil.HttpClientHandler.UseProxy = false;
+            HTTPUtil.HttpHandler.UseProxy = false;
         }
 
         if (option.CustomProxy != null)
         {
-            HTTPUtil.HttpClientHandler.Proxy = option.CustomProxy;
-            HTTPUtil.HttpClientHandler.UseProxy = true;
+            HTTPUtil.HttpHandler.Proxy = option.CustomProxy;
+            HTTPUtil.HttpHandler.UseProxy = true;
         }
+
+        // 必须在首次网络请求前配置；清单、密钥、分片和代理连接都使用同一接口约束。
+        HTTPUtil.ConfigureNetworkInterface(option.NetworkInterface);
+        HTTPUtil.ConfigureCookies(option.Cookies);
+        if (!option.DisableUpdateCheck)
+            _ = CheckUpdateAsync();
 
         // 检查互斥的选项
         if (option is { MuxAfterDone: false, MuxImports.Count: > 0 })
@@ -120,65 +134,6 @@ internal class Program
         {
             Logger.WarnMarkUp("LivePipeMux detected, forced enable LiveRealTimeMerge");
             option.LiveRealTimeMerge = true;
-        }
-
-        // 预先检查ffmpeg
-        option.FFmpegBinaryPath ??= GlobalUtil.FindExecutable("ffmpeg");
-
-        if (string.IsNullOrEmpty(option.FFmpegBinaryPath) || !File.Exists(option.FFmpegBinaryPath))
-        {
-            throw new FileNotFoundException(ResString.ffmpegNotFound);
-        }
-
-        Logger.Extra($"ffmpeg => {option.FFmpegBinaryPath}");
-
-        // 预先检查mkvmerge
-        if (option is { MuxOptions.UseMkvmerge: true, MuxAfterDone: true })
-        {
-            option.MkvmergeBinaryPath ??= GlobalUtil.FindExecutable("mkvmerge");
-            if (string.IsNullOrEmpty(option.MkvmergeBinaryPath) || !File.Exists(option.MkvmergeBinaryPath))
-            {
-                throw new FileNotFoundException(ResString.mkvmergeNotFound);
-            }
-            Logger.Extra($"mkvmerge => {option.MkvmergeBinaryPath}");
-        }
-
-        // 预先检查
-        if (option.Keys is { Length: > 0 } || option.KeyTextFile != null)
-        {
-            if (!string.IsNullOrEmpty(option.DecryptionBinaryPath) && !File.Exists(option.DecryptionBinaryPath))
-            {
-                throw new FileNotFoundException(option.DecryptionBinaryPath);
-            }
-            switch (option.DecryptionEngine)
-            {
-                case DecryptEngine.AUTO:
-                    Logger.Extra("decryption engine => auto");
-                    break;
-                case DecryptEngine.SHAKA_PACKAGER:
-                {
-                    var file = FindShakaPackager();
-                    if (file == null) throw new FileNotFoundException(ResString.shakaPackagerNotFound);
-                    option.DecryptionBinaryPath = file;
-                    Logger.Extra($"shaka-packager => {option.DecryptionBinaryPath}");
-                    break;
-                }
-                case DecryptEngine.MP4DECRYPT:
-                {
-                    var file = GlobalUtil.FindExecutable("mp4decrypt");
-                    if (file == null) throw new FileNotFoundException(ResString.mp4decryptNotFound);
-                    option.DecryptionBinaryPath = file;
-                    Logger.Extra($"mp4decrypt => {option.DecryptionBinaryPath}");
-                    break;
-                }
-                case DecryptEngine.CMAF:
-                    Logger.Extra("cmaf => internal");
-                    break;
-                case DecryptEngine.FFMPEG:
-                default:
-                    option.DecryptionBinaryPath = option.FFmpegBinaryPath;
-                    break;
-            }
         }
 
         // 默认的headers
@@ -202,6 +157,7 @@ internal class Program
             CustomMethod = option.CustomHLSMethod,
             CustomeKey = option.CustomHLSKey,
             CustomeIV = option.CustomHLSIv,
+            CustomHLSScope = option.CustomHLSScope,
             SkipSubtitleDecrypt = option.SkipSubtitleDecrypt,
             SkipAudioDecrypt = option.SkipAudioDecrypt,
         };
@@ -215,8 +171,6 @@ internal class Program
         parserConfig.ContentProcessors.Insert(0, new DemoProcessor());
         // demo2
         parserConfig.KeyProcessors.Insert(0, new DemoProcessor2());
-        // for www.nowehoryzonty.pl
-        parserConfig.UrlProcessors.Insert(0, new NowehoryzontyUrlProcessor());
 
         // 等待任务开始时间
         if (option.TaskStartAt != null && option.TaskStartAt > DateTime.Now)
@@ -231,13 +185,48 @@ internal class Program
         var url = option.Input;
 
         // 流提取器配置
-        var extractor = new StreamExtractor(parserConfig);
+        using var extractor = new StreamExtractor(parserConfig);
         // 从链接加载内容
         await RetryUtil.WebRequestRetryAsync(async () =>
         {
             await extractor.LoadSourceFromUrlAsync(url);
             return true;
         });
+        if (extractor.ExtractorType == ExtractorType.BINARY)
+        {
+            var binarySource = extractor.DirectSource ??
+                               throw new InvalidDataException("Binary input requires an HTTP response.");
+            await BinaryDownloadRunner.RunAsync(option, binarySource, headers);
+            return;
+        }
+        if (extractor.ExtractorType == ExtractorType.HTTP_LIVE)
+        {
+            if (option.SkipDownload)
+            {
+                return;
+            }
+            option.SaveName ??= OtherUtil.GetFileNameFromInput(option.Input);
+            var liveStreams = await extractor.ExtractStreamsAsync();
+            var liveConfig = new DownloaderConfig
+            {
+                MyOptions = option,
+                DirPrefix = string.Empty,
+                Headers = parserConfig.Headers
+            };
+            var liveRecorder = new HTTPLiveRecordManager(liveConfig, liveStreams, extractor);
+            if (await liveRecorder.StartRecordAsync())
+            {
+                Logger.InfoMarkUp("[white on green]Done[/]");
+            }
+            else
+            {
+                Logger.ErrorMarkUp("[white on red]Failed[/]");
+                Environment.ExitCode = 1;
+            }
+            return;
+        }
+
+        CheckMediaTools(option);
         // 解析流信息
         var streams = await extractor.ExtractStreamsAsync();
 
@@ -258,7 +247,7 @@ internal class Program
         }
 
         // 生成文件夹
-        var tmpDir = Path.Combine(option.TmpDir ?? Environment.CurrentDirectory, $"{option.SaveName ?? DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")}");
+        var tmpDir = Path.Combine(option.TmpDir ?? Environment.CurrentDirectory, OtherUtil.GetSafeFileName(option.SaveName ?? DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss")));
         // 记录文件
         if (option.WriteMetaJson)
         {
@@ -267,13 +256,35 @@ internal class Program
         // 写出文件
         await WriteRawFilesAsync(option, extractor, tmpDir);
 
+        // 在 drop 筛选前记录多 Period 身份；只留下一个 Period 时仍需按 PTO 裁剪。
+        var multiPeriodVod = extractor.ExtractorType == ExtractorType.MPEG_DASH &&
+            lists.Where(s => s.Playlist?.IsLive == false).SelectMany(s => s.Playlist!.MediaParts)
+                .Select(p => p.PeriodIndex).Distinct().Count() > 1;
         Logger.Info(ResString.streamsInfo, lists.Count, basicStreams.Count, audios.Count, subs.Count);
-
-        foreach (var item in lists)
+        foreach (var item in multiPeriodVod ? VodPartSelector.QualityChoices(lists) : lists)
         {
             Logger.InfoMarkUp(item.ToString());
         }
 
+        // 保存源分片列表，配置预览可以排除广告，但范围下载不能使用过滤后的编号/时间。
+        var dashSourceStreams = extractor.ExtractorType == ExtractorType.MPEG_DASH && lists.All(s => s.Playlist?.IsLive == false)
+            ? VodPartSelector.SnapshotStreams(lists) : null;
+        if (extractor.ExtractorType == ExtractorType.MPEG_DASH && lists.All(s => s.Playlist?.IsLive == false))
+        {
+            if (option.VodListParts)
+            {
+                await VodPartSelector.ListAsync(lists, option);
+                return;
+            }
+            // 必须先删除广告 Period，再匹配兼容编码；否则广告的 HEVC/AAC 配置会阻止正文规划。
+            VodPartSelector.Apply(lists, option.VodDropParts);
+            if (option.AdKeywords is { Length: > 0 })
+                FilterUtil.CleanAd(lists, option.AdKeywords);
+            lists.RemoveAll(s => s.SegmentsCount == 0);
+            basicStreams = lists.Where(s => s.MediaType is null or MediaType.VIDEO).ToList();
+            audios = lists.Where(s => s.MediaType == MediaType.AUDIO).ToList();
+            subs = lists.Where(s => s.MediaType == MediaType.SUBTITLES).ToList();
+        }
         var selectedStreams = new List<StreamSpec>();
         if (option.DropVideoFilter != null || option.DropAudioFilter != null || option.DropSubtitleFilter != null)
         {
@@ -281,6 +292,17 @@ internal class Program
             audios = FilterUtil.DoFilterDrop(audios, option.DropAudioFilter);
             subs = FilterUtil.DoFilterDrop(subs, option.DropSubtitleFilter);
             lists = basicStreams.Concat(audios).Concat(subs).ToList();
+        }
+
+        if (extractor.ExtractorType == ExtractorType.MPEG_DASH && lists.All(s => s.Playlist?.IsLive == false) &&
+            VodPartSelector.ShouldPrompt(option))
+        {
+            // 先选保留的配置，再选画质/匹配 Period，允许用户直接排除不兼容广告。
+            await VodPartSelector.SelectAsync(lists, option);
+            lists.RemoveAll(s => s.SegmentsCount == 0);
+            basicStreams = lists.Where(s => s.MediaType is null or MediaType.VIDEO).ToList();
+            audios = lists.Where(s => s.MediaType == MediaType.AUDIO).ToList();
+            subs = lists.Where(s => s.MediaType == MediaType.SUBTITLES).ToList();
         }
 
         if (option.DropVideoFilter != null) Logger.Extra($"DropVideoFilter => {option.DropVideoFilter}");
@@ -315,11 +337,18 @@ internal class Program
         else
         {
             // 展示交互式选择框
-            selectedStreams = FilterUtil.SelectStreams(lists);
+            // 点播各 Period 中重复的画质只展示一次，种子优先采用时长最长的正文轨道。
+            selectedStreams = FilterUtil.SelectStreams(multiPeriodVod ? VodPartSelector.QualityChoices(lists, dashSourceStreams) : lists);
         }
 
         if (selectedStreams.Count == 0)
             throw new Exception(ResString.noStreamsToDownload);
+
+        if (extractor.ExtractorType == ExtractorType.MPEG_DASH && selectedStreams.All(s => s.Playlist?.IsLive == false))
+            selectedStreams = VodStreamPlanner.Build(lists, selectedStreams,
+                option.AutoSelect ? null : option.VideoFilter,
+                option.AutoSelect ? null : option.AudioFilter,
+                option.AutoSelect ? null : option.SubtitleFilter, dashSourceStreams);
 
         // HLS: 选中流中若有没加载出playlist的，加载playlist
         // DASH/MSS: 加载playlist (调用url预处理器)
@@ -328,10 +357,23 @@ internal class Program
 
         // 直播检测
         var livingFlag = selectedStreams.Any(s => s.Playlist?.IsLive == true) && !option.LivePerformAsVod;
+        if (option.VodSelectParts == true && selectedStreams.Any(s => s.Playlist?.IsLive == true))
+            throw new NotSupportedException(ResString.vodPartsRequireVod);
         if (livingFlag)
         {
             Logger.WarnMarkUp($"[white on darkorange3_1]{ResString.liveFound}[/]");
+            if (option.VodDropParts != null || option.VodSelectParts == true)
+                throw new NotSupportedException(ResString.vodPartsRequireVod);
         }
+        if (option.VodListParts)
+        {
+            await VodPartSelector.ListAsync(selectedStreams, option, inspectInit: extractor.ExtractorType == ExtractorType.HLS);
+            return;
+        }
+        if (!livingFlag && extractor.ExtractorType == ExtractorType.HLS)
+            VodStreamPlanner.CaptureHlsTimeline(selectedStreams);
+        if (extractor.ExtractorType != ExtractorType.MPEG_DASH)
+            VodPartSelector.Apply(selectedStreams, option.VodDropParts);
 
         // 无法识别的加密方式，自动开启二进制合并
         if (selectedStreams.Any(s => s.Playlist!.MediaParts.Any(p => p.MediaSegments.Any(m => m.EncryptInfo.Method == EncryptMethod.UNKNOWN))))
@@ -340,12 +382,32 @@ internal class Program
             option.BinaryMerge = true;
         }
 
-        // 应用用户自定义的分片范围
+        // 按完整段时长选择，不能先截取几秒正文再把它归入短段；预览会忽略 URL 广告。
+        if (extractor.ExtractorType != ExtractorType.MPEG_DASH && !livingFlag &&
+            selectedStreams.All(s => s.Playlist?.IsLive == false) && VodPartSelector.ShouldPrompt(option))
+            await VodPartSelector.SelectAsync(selectedStreams, option, inspectInit: extractor.ExtractorType == ExtractorType.HLS);
+
+        // 保持原有顺序：先应用范围，再按 URL 去广告，时间范围仍以过滤广告前的轨道为准。
         if (!livingFlag)
             FilterUtil.ApplyCustomRange(selectedStreams, option.CustomRange);
-
-        // 应用用户自定义的广告分片关键字
         FilterUtil.CleanAd(selectedStreams, option.AdKeywords);
+        // 直播可能暂时没有媒体，保留轨道等待刷新。
+        if (!livingFlag)
+            selectedStreams.RemoveAll(stream => stream.SegmentsCount == 0);
+        if (selectedStreams.Count == 0)
+            throw new Exception(ResString.noStreamsToDownload);
+
+        if (!livingFlag && extractor.ExtractorType == ExtractorType.MPEG_DASH &&
+            (multiPeriodVod || selectedStreams.Any(s => s.Playlist!.MediaParts.Count > 1)))
+            VodStreamPlanner.AlignPeriods(selectedStreams);
+        if (!livingFlag && extractor.ExtractorType == ExtractorType.HLS &&
+            selectedStreams.Any(s => s.Playlist!.MediaParts.Count > 1 || s.MediaType == MediaType.SUBTITLES))
+            VodStreamPlanner.AlignHlsDiscontinuities(selectedStreams);
+
+        if (!livingFlag)
+            selectedStreams.RemoveAll(s => s.SegmentsCount == 0);
+        if (selectedStreams.Count == 0)
+            throw new Exception(ResString.noStreamsToDownload);
 
         // 记录文件
         if (option.WriteMetaJson)
@@ -391,12 +453,7 @@ internal class Program
 
         var result = false;
 
-        if (extractor.ExtractorType == ExtractorType.HTTP_LIVE)
-        {
-            var sldm = new HTTPLiveRecordManager(downloadConfig, selectedStreams, extractor);
-            result = await sldm.StartRecordAsync();
-        }
-        else if (!livingFlag)
+        if (!livingFlag)
         {
             // 开始下载
             var sdm = new SimpleDownloadManager(downloadConfig, selectedStreams, extractor);
@@ -416,6 +473,69 @@ internal class Program
         {
             Logger.ErrorMarkUp("[white on red]Failed[/]");
             Environment.ExitCode = 1;
+        }
+    }
+
+    private static void CheckMediaTools(MyOption option)
+    {
+        option.FFmpegBinaryPath ??= GlobalUtil.FindExecutable("ffmpeg");
+        if (string.IsNullOrEmpty(option.FFmpegBinaryPath) || !File.Exists(option.FFmpegBinaryPath))
+        {
+            throw new FileNotFoundException(ResString.ffmpegNotFound);
+        }
+        Logger.Extra($"ffmpeg => {option.FFmpegBinaryPath}");
+
+        if (option is { MuxOptions.UseMkvmerge: true, MuxAfterDone: true })
+        {
+            option.MkvmergeBinaryPath ??= GlobalUtil.FindExecutable("mkvmerge");
+            if (string.IsNullOrEmpty(option.MkvmergeBinaryPath) || !File.Exists(option.MkvmergeBinaryPath))
+            {
+                throw new FileNotFoundException(ResString.mkvmergeNotFound);
+            }
+            Logger.Extra($"mkvmerge => {option.MkvmergeBinaryPath}");
+        }
+
+        if (option.Keys is { Length: > 0 } || option.KeyTextFile != null)
+        {
+            if (!string.IsNullOrEmpty(option.DecryptionBinaryPath) && !File.Exists(option.DecryptionBinaryPath))
+            {
+                throw new FileNotFoundException(option.DecryptionBinaryPath);
+            }
+            switch (option.DecryptionEngine)
+            {
+                case DecryptEngine.AUTO:
+                    Logger.Extra("decryption engine => auto");
+                    break;
+                case DecryptEngine.SHAKA_PACKAGER:
+                {
+                    var file = FindShakaPackager();
+                    if (file == null)
+                    {
+                        throw new FileNotFoundException(ResString.shakaPackagerNotFound);
+                    }
+                    option.DecryptionBinaryPath = file;
+                    Logger.Extra($"shaka-packager => {option.DecryptionBinaryPath}");
+                    break;
+                }
+                case DecryptEngine.MP4DECRYPT:
+                {
+                    var file = GlobalUtil.FindExecutable("mp4decrypt");
+                    if (file == null)
+                    {
+                        throw new FileNotFoundException(ResString.mp4decryptNotFound);
+                    }
+                    option.DecryptionBinaryPath = file;
+                    Logger.Extra($"mp4decrypt => {option.DecryptionBinaryPath}");
+                    break;
+                }
+                case DecryptEngine.CMAF:
+                    Logger.Extra("cmaf => internal");
+                    break;
+                case DecryptEngine.FFMPEG:
+                default:
+                    option.DecryptionBinaryPath = option.FFmpegBinaryPath;
+                    break;
+            }
         }
     }
 
@@ -505,9 +625,10 @@ internal class Program
     static async Task<string> Get302Async(string url)
     {
         // this allows you to set the settings so that we can get the redirect url
-        var handler = new HttpClientHandler
+        var handler = new SocketsHttpHandler
         {
-            AllowAutoRedirect = false
+            AllowAutoRedirect = false,
+            ConnectCallback = HTTPUtil.HttpHandler.ConnectCallback,
         };
         var redirectedUrl = "";
         using var client = new HttpClient(handler);
