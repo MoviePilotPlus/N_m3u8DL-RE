@@ -244,6 +244,15 @@ internal partial class SimpleDownloadManager
         try
         {
             var fileBytes = File.ReadAllBytes(enc);
+            // 腾讯 master 下同一 GROUP 的子播放列表加密状态可能不一致（视频加密、
+            // HiFi 音轨明文无 KEY 行）。--custom-hls-method 按 scope 注入后两类分片
+            // 都会被标记 CHACHA20；若内容已是明文 TS（188 字节间隔同步字节成立），
+            // 再按块解密只会把数据解坏，此处跳过并原样保留。
+            if (ChaCha20Util.IsLikelyPlainTs(fileBytes))
+            {
+                Logger.DebugMarkUp($"[grey]CHACHA20 segment already plaintext, skip decryption: {Path.GetFileName(enc).EscapeMarkup()}[/]");
+                return;
+            }
             var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, keyBytes, nonce);
             File.WriteAllBytes(dec, decrypted);
             result.ActualFilePath = dec;
@@ -1330,8 +1339,16 @@ internal partial class SimpleDownloadManager
                         try
                         {
                             var fileBytes = await File.ReadAllBytesAsync(output);
-                            var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, keyBytes, nonce);
-                            await File.WriteAllBytesAsync(output, decrypted);
+                            // 与分段路径一致：注入 CHACHA20 但内容已是明文 TS 时不再整体解密
+                            if (ChaCha20Util.IsLikelyPlainTs(fileBytes))
+                            {
+                                Logger.InfoMarkUp("[grey]CHACHA20 output already plaintext, skip decryption.[/]");
+                            }
+                            else
+                            {
+                                var decrypted = ChaCha20Util.DecryptPer1024Bytes(fileBytes, keyBytes, nonce);
+                                await File.WriteAllBytesAsync(output, decrypted);
+                            }
                         }
                         catch (Exception ex)
                         {
